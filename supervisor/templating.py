@@ -140,8 +140,8 @@ helper = PyHelper()
 _MELD_NS_URL  = 'https://github.com/Supervisor/supervisor'
 _MELD_PREFIX  = '{%s}' % _MELD_NS_URL
 _MELD_LOCAL   = 'id'
-_MELD_ID      = '%s%s' % (_MELD_PREFIX, _MELD_LOCAL)
-_MELD_SHORT_ID = 'meld:%s' % _MELD_LOCAL
+_MELD_ID = f'{_MELD_PREFIX}{_MELD_LOCAL}'
+_MELD_SHORT_ID = f'meld:{_MELD_LOCAL}'
 _XHTML_NS_URL = 'http://www.w3.org/1999/xhtml'
 _XHTML_PREFIX = '{%s}' % _XHTML_NS_URL
 _XHTML_PREFIX_LEN = len(_XHTML_PREFIX)
@@ -342,14 +342,12 @@ class _MeldElementInterface:
 
         unfilled = []
 
-        for k in kw:
+        for k, val in kw.items():
             node = self.findmeld(k)
 
             if node is None:
                 unfilled.append(k)
                 continue
-
-            val = kw[k]
 
             if k.endswith(':inputgroup'):
                 # an input group is a list of input type="checkbox" or
@@ -443,9 +441,7 @@ class _MeldElementInterface:
         # this could be faster if we indexed all the meld nodes in the
         # tree; we just walk the whole hierarchy now.
         result = helper.findmeld(self, name)
-        if result is None:
-            return default
-        return result
+        return default if result is None else result
 
     def findmelds(self):
         """ Find all nodes that have a meld id attribute and return
@@ -462,11 +458,8 @@ class _MeldElementInterface:
         for element in iterator:
             attribval = element.attrib.get(attrib)
             if attribval is not None:
-                if value is None:
+                if value is not None and value == attribval or value is None:
                     elements.append(element)
-                else:
-                    if value == attribval:
-                        elements.append(element)
         return elements
 
     # ZPT-alike methods
@@ -484,20 +477,13 @@ class _MeldElementInterface:
         in the template. 'data' is a value from the passed in
         iterable.  Changing 'newelement' (typically based on values
         from 'data') mutates the element 'in place'."""
-        if childname:
-            element = self.findmeld(childname)
-        else:
-            element = self
-
+        element = self.findmeld(childname) if childname else self
         parent = element.parent
         # creating a list is faster than yielding a generator (py 2.4)
         L = []
         first = True
         for thing in iterable:
-            if first is True:
-                clone = element
-            else:
-                clone = helper.bfclone(element, parent)
+            clone = element if first is True else helper.bfclone(element, parent)
             L.append((clone, thing))
             first = False
         return L
@@ -529,9 +515,9 @@ class _MeldElementInterface:
         for k, v in kw.items():
             # prevent this from getting to the parser if possible
             if not isinstance(k, StringTypes):
-                raise ValueError('do not set non-stringtype as key: %s' % k)
+                raise ValueError(f'do not set non-stringtype as key: {k}')
             if not isinstance(v, StringTypes):
-                raise ValueError('do not set non-stringtype as val: %s' % v)
+                raise ValueError(f'do not set non-stringtype as val: {v}')
             self.attrib[k] = kw[k]
 
     # output methods
@@ -581,8 +567,7 @@ class _MeldElementInterface:
             if doctype:
                 _write_doctype(write, doctype)
         _write_html(write, self, encoding, {})
-        joined = _BLANK.join(data)
-        return joined
+        return _BLANK.join(data)
 
     def write_html(self, file, encoding=None, doctype=doctype.html,
                    fragment=False):
@@ -682,16 +667,16 @@ class _MeldElementInterface:
         srcids = [ x.meldid() for x in srcelements ]
         tgtids = [ x.meldid() for x in tgtelements ]
 
-        removed = []
-        for srcelement in srcelements:
-            if srcelement.meldid() not in tgtids:
-                removed.append(srcelement)
-
-        added = []
-        for tgtelement in tgtelements:
-            if tgtelement.meldid() not in srcids:
-                added.append(tgtelement)
-
+        removed = [
+            srcelement
+            for srcelement in srcelements
+            if srcelement.meldid() not in tgtids
+        ]
+        added = [
+            tgtelement
+            for tgtelement in tgtelements
+            if tgtelement.meldid() not in srcids
+        ]
         moved = []
         for srcelement in srcelements:
             srcid = srcelement.meldid()
@@ -734,8 +719,7 @@ class MeldTreeBuilder(TreeBuilder):
         for key, value in attrs.items():
             if key == _MELD_ID:
                 if value in self.meldids:
-                    raise ValueError('Repeated meld id "%s" in source' %
-                                     value)
+                    raise ValueError(f'Repeated meld id "{value}" in source')
                 self.meldids[value] = 1
                 break
         return elem
@@ -778,17 +762,16 @@ class HTMLXMLParser(HTMLParser):
             # look for encoding directives
             http_equiv = content = None
             for k, v in attrs:
-                if k == "http-equiv":
-                    http_equiv = v.lower()
-                elif k == "content":
+                if k == "content":
                     content = v
+                elif k == "http-equiv":
+                    http_equiv = v.lower()
             if http_equiv == "content-type" and content:
                 # use email to parse the http header
                 msg = email.message_from_string(
                     "%s: %s\n\n" % (http_equiv, content)
                     )
-                encoding = msg.get_param("charset")
-                if encoding:
+                if encoding := msg.get_param("charset"):
                     self.encoding = encoding
         if tag in AUTOCLOSE:
             if self.__stack and self.__stack[-1] == tag:
@@ -800,8 +783,7 @@ class HTMLXMLParser(HTMLParser):
                 if k == _MELD_SHORT_ID:
                     k = _MELD_ID
                     if self.meldids.get(v):
-                        raise ValueError('Repeated meld id "%s" in source' %
-                                         v)
+                        raise ValueError(f'Repeated meld id "{v}" in source')
                     self.meldids[v] = 1
                 else:
                     k = k.lower()
@@ -820,19 +802,12 @@ class HTMLXMLParser(HTMLParser):
         self.builder.end(tag)
 
     def handle_charref(self, char):
-        if char[:1] == "x":
-            char = int(char[1:], 16)
-        else:
-            char = int(char)
+        char = int(char[1:], 16) if char[:1] == "x" else int(char)
         self.builder.data(unichr(char))
 
     def handle_entityref(self, name):
-        entity = htmlentitydefs.entitydefs.get(name)
-        if entity:
-            if len(entity) == 1:
-                entity = ord(entity)
-            else:
-                entity = int(entity[2:-1])
+        if entity := htmlentitydefs.entitydefs.get(name):
+            entity = ord(entity) if len(entity) == 1 else int(entity[2:-1])
             self.builder.data(unichr(entity))
         else:
             self.unknown_entityref(name)
@@ -916,20 +891,15 @@ def _write_html(write, node, encoding, namespaces, depth=-1, maxdepth=None):
     to_write = _BLANK
 
     if tag is Replace:
-        if not node.structure:
-            if cdata_needs_escaping(text):
+        if cdata_needs_escaping(text):
+            if not node.structure:
                 text = _escape_cdata(text)
         write(encode(text, encoding))
 
-    elif tag is Comment:
+    elif tag is Comment or tag is ProcessingInstruction:
         if cdata_needs_escaping(text):
             text = _escape_cdata(text)
-        write(encode('<!-- ' + text + ' -->', encoding))
-
-    elif tag is ProcessingInstruction:
-        if cdata_needs_escaping(text):
-            text = _escape_cdata(text)
-        write(encode('<!-- ' + text + ' -->', encoding))
+        write(encode(f'<!-- {text} -->', encoding))
 
     else:
         xmlns_items = [] # new namespaces in this scope
@@ -949,11 +919,7 @@ def _write_html(write, node, encoding, namespaces, depth=-1, maxdepth=None):
         attrib = node.attrib
 
         if attrib is not None:
-            if len(attrib) > 1:
-                attrib_keys = list(attrib.keys())
-                attrib_keys.sort()
-            else:
-                attrib_keys = attrib
+            attrib_keys = sorted(attrib.keys()) if len(attrib) > 1 else attrib
             for k in attrib_keys:
                 try:
                     if k[:1] == "{":
@@ -972,13 +938,14 @@ def _write_html(write, node, encoding, namespaces, depth=-1, maxdepth=None):
         to_write += _OPEN_TAG_END
 
         if text is not None and text:
-            if tag in _HTMLTAGS_NOESCAPE:
+            if (
+                tag in _HTMLTAGS_NOESCAPE
+                or tag not in _HTMLTAGS_NOESCAPE
+                and not cdata_needs_escaping(text)
+            ):
                 to_write += encode(text, encoding)
-            elif cdata_needs_escaping(text):
-                to_write += _escape_cdata(text)
             else:
-                to_write += encode(text,encoding)
-
+                to_write += _escape_cdata(text)
         write(to_write)
 
         for child in node._children:
@@ -1025,10 +992,7 @@ def _write_xml(write, node, encoding, namespaces, pipeline, xhtml=False):
         if xhtml:
             if tag[:_XHTML_PREFIX_LEN] == _XHTML_PREFIX:
                 tag = tag[_XHTML_PREFIX_LEN:]
-        if node.attrib:
-            items = list(node.attrib.items())
-        else:
-            items = []  # must always be sortable.
+        items = list(node.attrib.items()) if node.attrib else []
         xmlns_items = [] # new namespaces in this scope
         try:
             if tag[:1] == "{":
@@ -1156,21 +1120,17 @@ def insert_doctype(data, doctype=doctype.xhtml):
     # doesn't already contain a doctype declaration
     match = _XML_DECL_RE.search(data)
     dt_string = '<!DOCTYPE %s PUBLIC "%s" "%s">' % doctype
-    if match is not None:
-        start, end = match.span(0)
-        before = data[:start]
-        tag = data[start:end]
-        after = data[end:]
-        return before + tag + dt_string + after
-    else:
+    if match is None:
         return dt_string + data
+    start, end = match.span(0)
+    return data[:start] + data[start:end] + dt_string + data[end:]
 
 def insert_meld_ns_decl(data):
     match = _BEGIN_TAG_RE.search(data)
     if match is not None:
         start, end = match.span(0)
         before = data[:start]
-        tag = data[start:end] + ' xmlns:meld="%s"' % _MELD_NS_URL
+        tag = f'{data[start:end]} xmlns:meld="{_MELD_NS_URL}"'
         after = data[end:]
         data =  before + tag + after
     return data
@@ -1210,11 +1170,7 @@ def diffreduce(elements):
     return reduced
 
 def intersection(S1, S2):
-    L = []
-    for element in S1:
-        if element in S2:
-            L.append(element)
-    return L
+    return [element for element in S1 if element in S2]
 
 def melditerator(element, meldid=None, _MELD_ID=_MELD_ID):
     nodeid = element.attrib.get(_MELD_ID)
@@ -1300,13 +1256,10 @@ def fixtag(tag, namespaces):
         if prefix is None:
             prefix = "ns%d" % len(namespaces)
         namespaces[namespace_uri] = prefix
-        if prefix == "xml":
-            xmlns = None
-        else:
-            xmlns = ("xmlns:%s" % prefix, namespace_uri)
+        xmlns = None if prefix == "xml" else (f"xmlns:{prefix}", namespace_uri)
     else:
         xmlns = None
-    return "%s:%s" % (prefix, tag), xmlns
+    return f"{prefix}:{tag}", xmlns
 
 #-----------------------------------------------------------------------------
 # End fork from Python 2.6.8 stdlib

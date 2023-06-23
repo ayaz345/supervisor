@@ -86,25 +86,26 @@ class DeferredWebProducer:
         wrap_in_chunking = 0
 
         if self.request.version == '1.0':
-            if connection == 'keep-alive':
-                if not self.request.has_key('Content-Length'):
-                    close_it = 1
-                else:
-                    self.request['Connection'] = 'Keep-Alive'
+            if connection == 'keep-alive' and self.request.has_key(
+                'Content-Length'
+            ):
+                self.request['Connection'] = 'Keep-Alive'
             else:
                 close_it = 1
         elif self.request.version == '1.1':
             if connection == 'close':
                 close_it = 1
             elif 'Content-Length' not in self.request:
-                if 'Transfer-Encoding' in self.request:
-                    if not self.request['Transfer-Encoding'] == 'chunked':
-                        close_it = 1
-                elif self.request.use_chunked:
+                if (
+                    'Transfer-Encoding' in self.request
+                    and self.request['Transfer-Encoding'] != 'chunked'
+                    or 'Transfer-Encoding' not in self.request
+                    and not self.request.use_chunked
+                ):
+                    close_it = 1
+                elif 'Transfer-Encoding' not in self.request:
                     self.request['Transfer-Encoding'] = 'chunked'
                     wrap_in_chunking = 1
-                else:
-                    close_it = 1
         elif self.request.version is None:
             close_it = 1
 
@@ -194,24 +195,24 @@ class TailView(MeldView):
         supervisord = self.context.supervisord
         form = self.context.form
 
-        if not 'processname' in form:
+        if 'processname' not in form:
             tail = 'No process name found'
             processname = None
         else:
             processname = form['processname']
-            offset = 0
             limit = form.get('limit', '1024')
             limit = min(-1024, int(limit)*-1 if limit.isdigit() else -1024)
             if not processname:
                 tail = 'No process name found'
             else:
                 rpcinterface = SupervisorNamespaceRPCInterface(supervisord)
+                offset = 0
                 try:
                     tail = rpcinterface.readProcessStdoutLog(processname,
                                                              limit, offset)
                 except RPCError as e:
                     if e.code == Faults.NO_FILE:
-                        tail = 'No file for %s' % processname
+                        tail = f'No file for {processname}'
                     else:
                         tail = 'ERROR: unexpected rpc fault [%d] %s' % (
                             e.code, e.text)
@@ -219,16 +220,14 @@ class TailView(MeldView):
         root = self.clone()
 
         title = root.findmeld('title')
-        title.content('Supervisor tail of process %s' % processname)
+        title.content(f'Supervisor tail of process {processname}')
         tailbody = root.findmeld('tailbody')
         tailbody.content(tail)
 
         refresh_anchor = root.findmeld('refresh_anchor')
         if processname is not None:
             refresh_anchor.attributes(
-                href='tail.html?processname=%s&limit=%s' % (
-                    urllib.quote(processname), urllib.quote(str(abs(limit)))
-                    )
+                href=f'tail.html?processname={urllib.quote(processname)}&limit={urllib.quote(str(abs(limit)))}'
             )
         else:
             refresh_anchor.deparent()
@@ -242,42 +241,41 @@ class StatusView(MeldView):
                                                  process.config.name))
         start = {
             'name': 'Start',
-            'href': 'index.html?processname=%s&amp;action=start' % processname,
+            'href': f'index.html?processname={processname}&amp;action=start',
             'target': None,
         }
         restart = {
             'name': 'Restart',
-            'href': 'index.html?processname=%s&amp;action=restart' % processname,
+            'href': f'index.html?processname={processname}&amp;action=restart',
             'target': None,
         }
         stop = {
             'name': 'Stop',
-            'href': 'index.html?processname=%s&amp;action=stop' % processname,
+            'href': f'index.html?processname={processname}&amp;action=stop',
             'target': None,
         }
         clearlog = {
             'name': 'Clear Log',
-            'href': 'index.html?processname=%s&amp;action=clearlog' % processname,
+            'href': f'index.html?processname={processname}&amp;action=clearlog',
             'target': None,
         }
         tailf_stdout = {
             'name': 'Tail -f Stdout',
-            'href': 'logtail/%s' % processname,
-            'target': '_blank'
+            'href': f'logtail/{processname}',
+            'target': '_blank',
         }
         tailf_stderr = {
             'name': 'Tail -f Stderr',
-            'href': 'logtail/%s/stderr' % processname,
-            'target': '_blank'
+            'href': f'logtail/{processname}/stderr',
+            'target': '_blank',
         }
         if state == ProcessStates.RUNNING:
-            actions = [restart, stop, clearlog, tailf_stdout, tailf_stderr]
+            return [restart, stop, clearlog, tailf_stdout, tailf_stderr]
         elif state in (ProcessStates.STOPPED, ProcessStates.EXITED,
                        ProcessStates.FATAL):
-            actions = [start, None, clearlog, tailf_stdout, tailf_stderr]
+            return [start, None, clearlog, tailf_stdout, tailf_stderr]
         else:
-            actions = [None, None, clearlog, tailf_stdout, tailf_stderr]
-        return actions
+            return [None, None, clearlog, tailf_stdout, tailf_stderr]
 
     def css_class_for_state(self, state):
         if state == ProcessStates.RUNNING:
@@ -301,8 +299,9 @@ class StatusView(MeldView):
 
             if action == 'refresh':
                 def donothing():
-                    message = 'Page refreshed at %s' % time.ctime()
+                    message = f'Page refreshed at {time.ctime()}'
                     return message
+
                 donothing.delay = 0.05
                 return donothing
 
@@ -312,7 +311,8 @@ class StatusView(MeldView):
                     if callback() is NOT_DONE_YET:
                         return NOT_DONE_YET
                     else:
-                        return 'All stopped at %s' % time.ctime()
+                        return f'All stopped at {time.ctime()}'
+
                 stopall.delay = 0.05
                 return stopall
 
@@ -324,13 +324,15 @@ class StatusView(MeldView):
                     result = callback()
                     if result is NOT_DONE_YET:
                         return NOT_DONE_YET
-                    return 'All restarted at %s' % time.ctime()
+                    return f'All restarted at {time.ctime()}'
+
                 restartall.delay = 0.05
                 return restartall
 
             elif namespec:
                 def wrong():
-                    return 'No such process named %s' % namespec
+                    return f'No such process named {namespec}'
+
                 wrong.delay = 0.05
                 group_name, process_name = split_namespec(namespec)
                 group = supervisord.process_groups.get(group_name)
@@ -360,7 +362,8 @@ class StatusView(MeldView):
                             msg = 'unexpected rpc fault [%d] %s' % (
                                 e.code, e.text)
                         def starterr():
-                            return 'ERROR: Process %s: %s' % (namespec, msg)
+                            return f'ERROR: Process {namespec}: {msg}'
+
                         starterr.delay = 0.05
                         return starterr
 
@@ -376,16 +379,18 @@ class StatusView(MeldView):
                                 else:
                                     msg = 'unexpected rpc fault [%d] %s' % (
                                         e.code, e.text)
-                                return 'ERROR: Process %s: %s' % (namespec, msg)
+                                return f'ERROR: Process {namespec}: {msg}'
 
                             if result is NOT_DONE_YET:
                                 return NOT_DONE_YET
-                            return 'Process %s started' % namespec
+                            return f'Process {namespec} started'
+
                         startprocess.delay = 0.05
                         return startprocess
                     else:
                         def startdone():
-                            return 'Process %s started' % namespec
+                            return f'Process {namespec} started'
+
                         startdone.delay = 0.05
                         return startdone
 
@@ -410,12 +415,14 @@ class StatusView(MeldView):
                                     e.code, e.text)
                             if result is NOT_DONE_YET:
                                 return NOT_DONE_YET
-                            return 'Process %s stopped' % namespec
+                            return f'Process {namespec} stopped'
+
                         stopprocess.delay = 0.05
                         return stopprocess
                     else:
                         def stopdone():
-                            return 'Process %s stopped' % namespec
+                            return f'Process {namespec} stopped'
+
                         stopdone.delay = 0.05
                         return stopdone
 
@@ -433,12 +440,14 @@ class StatusView(MeldView):
                             results = callback()
                             if results is NOT_DONE_YET:
                                 return NOT_DONE_YET
-                            return 'Process %s restarted' % namespec
+                            return f'Process {namespec} restarted'
+
                         restartprocess.delay = 0.05
                         return restartprocess
                     else:
                         def restartdone():
-                            return 'Process %s restarted' % namespec
+                            return f'Process {namespec} restarted'
+
                         restartdone.delay = 0.05
                         return restartdone
 
@@ -454,15 +463,16 @@ class StatusView(MeldView):
                         return clearerr
 
                     def clearlog():
-                        return 'Log for %s cleared' % namespec
+                        return f'Log for {namespec} cleared'
+
                     clearlog.delay = 0.05
                     return clearlog
 
         raise ValueError(action)
 
     def render(self):
-        form = self.context.form
         response = self.context.response
+        form = self.context.form
         processname = form.get('processname')
         action = form.get('action')
         message = form.get('message')
@@ -478,8 +488,7 @@ class StatusView(MeldView):
                     return NOT_DONE_YET
                 if message is not None:
                     server_url = form['SERVER_URL']
-                    location = server_url + "/" + '?message=%s' % urllib.quote(
-                        message)
+                    location = f"{server_url}/" + f'?message={urllib.quote(message)}'
                     response['headers']['Location'] = location
 
         supervisord = self.context.supervisord
@@ -490,9 +499,10 @@ class StatusView(MeldView):
 
         processnames = []
         for group in supervisord.process_groups.values():
-            for gprocname in group.processes.keys():
-                processnames.append((group.config.name, gprocname))
-
+            processnames.extend(
+                (group.config.name, gprocname)
+                for gprocname in group.processes.keys()
+            )
         processnames.sort()
 
         data = []
@@ -532,8 +542,7 @@ class StatusView(MeldView):
 
                 anchor = tr_element.findmeld('name_anchor')
                 processname = make_namespec(item['group'], item['name'])
-                anchor.attributes(href='tail.html?processname=%s' %
-                                  urllib.quote(processname))
+                anchor.attributes(href=f'tail.html?processname={urllib.quote(processname)}')
                 anchor.content(processname)
 
                 actions = item['actions']
@@ -614,10 +623,10 @@ class supervisor_ui_handler:
         else:
             self.continue_request('', request)
 
-    def continue_request (self, data, request):
+    def continue_request(self, data, request):
         form = {}
         cgi_env = request.cgi_environment()
-        form.update(cgi_env)
+        form |= cgi_env
         if 'QUERY_STRING' not in form:
             form['QUERY_STRING'] = ''
 

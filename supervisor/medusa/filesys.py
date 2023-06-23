@@ -103,47 +103,44 @@ class os_filesystem:
         p = self.normalize (self.path_module.join (self.wd, path))
         return self.path_module.isdir (self.translate(p))
 
-    def cwd (self, path):
+    def cwd(self, path):
         p = self.normalize (self.path_module.join (self.wd, path))
         translated_path = self.translate(p)
-        if not self.path_module.isdir (translated_path):
+        if not self.path_module.isdir(translated_path):
             return 0
-        else:
-            old_dir = os.getcwd()
-            # temporarily change to that directory, in order
-            # to see if we have permission to do so.
-            can = 0
-            try:
-                try:
-                    os.chdir (translated_path)
-                    can = 1
-                    self.wd = p
-                except:
-                    pass
-            finally:
-                if can:
-                    os.chdir (old_dir)
-            return can
+        old_dir = os.getcwd()
+        # temporarily change to that directory, in order
+        # to see if we have permission to do so.
+        can = 0
+        try:
+            os.chdir (translated_path)
+            can = 1
+            self.wd = p
+        except:
+            pass
+        finally:
+            if can:
+                os.chdir (old_dir)
+        return can
 
     def cdup (self):
         return self.cwd ('..')
 
-    def listdir (self, path, long=0):
+    def listdir(self, path, long=0):
         p = self.translate (path)
         # I think we should glob, but limit it to the current
         # directory only.
         ld = os.listdir (p)
         if not long:
             return list_producer (ld, None)
-        else:
-            old_dir = os.getcwd()
-            try:
-                os.chdir (p)
-                # if os.stat fails we ignore that file.
-                result = [_f for _f in map (safe_stat, ld) if _f]
-            finally:
-                os.chdir (old_dir)
-            return list_producer (result, self.longify)
+        old_dir = os.getcwd()
+        try:
+            os.chdir (p)
+            # if os.stat fails we ignore that file.
+            result = [_f for _f in map (safe_stat, ld) if _f]
+        finally:
+            os.chdir (old_dir)
+        return list_producer (result, self.longify)
 
     # TODO: implement a cache w/timeout for stat()
     def stat (self, path):
@@ -193,11 +190,8 @@ class os_filesystem:
         (path, stat_info) = path_stat_info_tuple
         return unix_longify (path, stat_info)
 
-    def __repr__ (self):
-        return '<unix-style fs root:%s wd:%s>' % (
-                self.root,
-                self.wd
-                )
+    def __repr__(self):
+        return f'<unix-style fs root:{self.root} wd:{self.wd}>'
 
 if os.name == 'posix':
 
@@ -279,11 +273,8 @@ class merged_filesystem:
 # this matches the output of NT's ftp server (when in
 # MSDOS mode) exactly.
 
-def msdos_longify (file, stat_info):
-    if stat.S_ISDIR (stat_info[stat.ST_MODE]):
-        dir = '<DIR>'
-    else:
-        dir = '     '
+def msdos_longify(file, stat_info):
+    dir = '<DIR>' if stat.S_ISDIR (stat_info[stat.ST_MODE]) else '     '
     date = msdos_date (stat_info[stat.ST_MTIME])
     return '%s       %s %8d %s' % (
             date,
@@ -329,14 +320,11 @@ mode_table = {
 
 import time
 
-def unix_longify (file, stat_info):
+def unix_longify(file, stat_info):
     # for now, only pay attention to the lower bits
     mode = ('%o' % stat_info[stat.ST_MODE])[-3:]
     mode = ''.join([mode_table[x] for x in mode])
-    if stat.S_ISDIR (stat_info[stat.ST_MODE]):
-        dirchar = 'd'
-    else:
-        dirchar = '-'
+    dirchar = 'd' if stat.S_ISDIR (stat_info[stat.ST_MODE]) else '-'
     date = ls_date (long(time.time()), stat_info[stat.ST_MTIME])
     return '%s%s %3d %-8d %-8d %8d %s %s' % (
             dirchar,
@@ -386,14 +374,13 @@ class list_producer:
         self.func = func
 
     # this should do a pushd/popd
-    def more (self):
+    def more(self):
         if not self.list:
             return ''
-        else:
-            # do a few at a time
-            bunch = self.list[:50]
-            if self.func is not None:
-                bunch = map (self.func, bunch)
-            self.list = self.list[50:]
-            return '\r\n'.join(bunch) + '\r\n'
+        # do a few at a time
+        bunch = self.list[:50]
+        if self.func is not None:
+            bunch = map (self.func, bunch)
+        self.list = self.list[50:]
+        return '\r\n'.join(bunch) + '\r\n'
 

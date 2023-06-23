@@ -9,8 +9,8 @@ def concat (*args):
 def join (seq, field=' '):
     return field.join (seq)
 
-def group (s):
-    return '(' + s + ')'
+def group(s):
+    return f'({s})'
 
 short_days = ['sun','mon','tue','wed','thu','fri','sat']
 long_days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
@@ -27,10 +27,7 @@ hms_reg = join (3 * [group('[0-9][0-9]')], ':')
 
 months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
 
-monmap = {}
-for i in range(12):
-    monmap[months[i]] = i+1
-
+monmap = {months[i]: i+1 for i in range(12)}
 months_reg = group (join (months, '|'))
 
 # From draft-ietf-http-v11-spec-07.txt/3.3.1

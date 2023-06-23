@@ -87,10 +87,12 @@ class fgthread(threading.Thread):
         threading.Thread.start(self)
 
     def run(self): # pragma: no cover
-        self.output_handler.get(self.ctl.options.serverurl,
-                                '/logtail/%s/stdout' % self.program)
-        self.error_handler.get(self.ctl.options.serverurl,
-                               '/logtail/%s/stderr' % self.program)
+        self.output_handler.get(
+            self.ctl.options.serverurl, f'/logtail/{self.program}/stdout'
+        )
+        self.error_handler.get(
+            self.ctl.options.serverurl, f'/logtail/{self.program}/stderr'
+        )
         asyncore.loop()
 
     def __run(self): # pragma: no cover
@@ -100,14 +102,11 @@ class fgthread(threading.Thread):
         self.run = self.__run_backup
 
     def globaltrace(self, frame, why, arg):
-        if why == 'call':
-            return self.localtrace
-        else:
-            return None
+        return self.localtrace if why == 'call' else None
 
     def localtrace(self, frame, why, arg):
-        if self.killed:
-            if why == 'line':
+        if why == 'line':
+            if self.killed:
                 raise SystemExit()
         return self.localtrace
 
@@ -121,7 +120,7 @@ class Controller(cmd.Cmd):
     def __init__(self, options, completekey='tab', stdin=None,
                  stdout=None):
         self.options = options
-        self.prompt = self.options.prompt + '> '
+        self.prompt = f'{self.options.prompt}> '
         self.options.plugins = []
         self.vocab = ['help']
         self._complete_info = None
@@ -140,7 +139,7 @@ class Controller(cmd.Cmd):
         return
 
     def default(self, line):
-        self.output('*** Unknown syntax: %s' % line)
+        self.output(f'*** Unknown syntax: {line}')
         self.exitstatus = LSBInitExitStatuses.GENERIC
 
     def exec_cmdloop(self, args, options):
@@ -173,7 +172,6 @@ class Controller(cmd.Cmd):
             self.cmdloop()
         except KeyboardInterrupt:
             self.output('')
-            pass
 
     def set_exitstatus_from_xmlrpc_fault(self, faultcode, ignored_faultcode=None):
         if faultcode in (ignored_faultcode, xmlrpc.Faults.SUCCESS):
@@ -198,38 +196,37 @@ class Controller(cmd.Cmd):
 
         if cmd == '':
             return self.default(line)
-        else:
-            do_func = self._get_do_func(cmd)
-            if do_func is None:
-                return self.default(line)
+        do_func = self._get_do_func(cmd)
+        if do_func is None:
+            return self.default(line)
+        try:
             try:
-                try:
-                    return do_func(arg)
-                except xmlrpclib.ProtocolError as e:
-                    if e.errcode == 401:
-                        if self.options.interactive:
-                            self.output('Server requires authentication')
-                            username = raw_input('Username:')
-                            password = getpass.getpass(prompt='Password:')
-                            self.output('')
-                            self.options.username = username
-                            self.options.password = password
-                            return self.onecmd(line)
-                        else:
-                            self.output('Server requires authentication')
-                            self.exitstatus = LSBInitExitStatuses.GENERIC
+                return do_func(arg)
+            except xmlrpclib.ProtocolError as e:
+                if e.errcode == 401:
+                    if self.options.interactive:
+                        self.output('Server requires authentication')
+                        username = raw_input('Username:')
+                        password = getpass.getpass(prompt='Password:')
+                        self.output('')
+                        self.options.username = username
+                        self.options.password = password
+                        return self.onecmd(line)
                     else:
+                        self.output('Server requires authentication')
                         self.exitstatus = LSBInitExitStatuses.GENERIC
-                        raise
-                do_func(arg)
-            except Exception:
-                (file, fun, line), t, v, tbinfo = asyncore.compact_traceback()
-                error = 'error: %s, %s: file: %s line: %s' % (t, v, file, line)
-                self.output(error)
-                self.exitstatus = LSBInitExitStatuses.GENERIC
+                else:
+                    self.exitstatus = LSBInitExitStatuses.GENERIC
+                    raise
+            do_func(arg)
+        except Exception:
+            (file, fun, line), t, v, tbinfo = asyncore.compact_traceback()
+            error = f'error: {t}, {v}: file: {file} line: {line}'
+            self.output(error)
+            self.exitstatus = LSBInitExitStatuses.GENERIC
 
     def _get_do_func(self, cmd):
-        func_name = 'do_' + cmd
+        func_name = f'do_{cmd}'
         func = getattr(self, func_name, None)
         if not func:
             for plugin in self.options.plugins:
@@ -248,10 +245,7 @@ class Controller(cmd.Cmd):
 
     def get_server_proxy(self, namespace=None):
         proxy = self.options.getServerProxy()
-        if namespace is None:
-            return proxy
-        else:
-            return getattr(proxy, namespace)
+        return proxy if namespace is None else getattr(proxy, namespace)
 
     def upcheck(self):
         try:
@@ -279,11 +273,11 @@ class Controller(cmd.Cmd):
             raise
         except socket.error as e:
             if e.args[0] == errno.ECONNREFUSED:
-                self.output('%s refused connection' % self.options.serverurl)
+                self.output(f'{self.options.serverurl} refused connection')
                 self.exitstatus = LSBInitExitStatuses.INSUFFICIENT_PRIVILEGES
                 return False
             elif e.args[0] == errno.ENOENT:
-                self.output('%s no such file' % self.options.serverurl)
+                self.output(f'{self.options.serverurl} no such file')
                 self.exitstatus = LSBInitExitStatuses.NOT_RUNNING
                 return False
             self.exitstatus = LSBInitExitStatuses.GENERIC
@@ -325,7 +319,7 @@ class Controller(cmd.Cmd):
 
     def _complete_actions(self, text):
         """Build a completion list of action names matching text"""
-        return [ a + ' ' for a in self.vocab if a.startswith(text)]
+        return [f'{a} ' for a in self.vocab if a.startswith(text)]
 
     def _complete_groups(self, text):
         """Build a completion list of group names matching text"""
@@ -333,19 +327,19 @@ class Controller(cmd.Cmd):
         for info in self._get_complete_info():
             if info['group'] not in groups:
                 groups.append(info['group'])
-        return [ g + ' ' for g in groups if g.startswith(text) ]
+        return [f'{g} ' for g in groups if g.startswith(text)]
 
     def _complete_processes(self, text):
         """Build a completion list of process names matching text"""
         processes = []
         for info in self._get_complete_info():
             if ':' in text or info['name'] != info['group']:
-                processes.append('%s:%s' % (info['group'], info['name']))
-                if '%s:*' % info['group'] not in processes:
-                    processes.append('%s:*' % info['group'])
+                processes.append(f"{info['group']}:{info['name']}")
+                if f"{info['group']}:*" not in processes:
+                    processes.append(f"{info['group']}:*")
             else:
                 processes.append(info['name'])
-        return [ p + ' ' for p in processes if p.startswith(text) ]
+        return [f'{p} ' for p in processes if p.startswith(text)]
 
     def _get_complete_info(self):
         """Get all process info used for completion.  We cache this between
@@ -379,7 +373,7 @@ def get_names(inst):
     while classes:
         aclass = classes.pop(0)
         if aclass.__bases__:
-            classes = classes + list(aclass.__bases__)
+            classes += list(aclass.__bases__)
         names = names + dir(aclass)
     return names
 
@@ -390,18 +384,17 @@ class ControllerPluginBase:
         self.ctl = controller
 
     def _doc_header(self):
-        return "%s commands (type help <topic>):" % self.name
+        return f"{self.name} commands (type help <topic>):"
     doc_header = property(_doc_header)
 
     def do_help(self, arg):
         if arg:
             # XXX check arg syntax
             try:
-                func = getattr(self, 'help_' + arg)
+                func = getattr(self, f'help_{arg}')
             except AttributeError:
                 try:
-                    doc = getattr(self, 'do_' + arg).__doc__
-                    if doc:
+                    if doc := getattr(self, f'do_{arg}').__doc__:
                         self.ctl.output(doc)
                         return
                 except AttributeError:
@@ -413,10 +406,7 @@ class ControllerPluginBase:
             names = get_names(self)
             cmds_doc = []
             cmds_undoc = []
-            help = {}
-            for name in names:
-                if name[:5] == 'help_':
-                    help[name[5:]]=1
+            help = {name[5:]: 1 for name in names if name[:5] == 'help_'}
             names.sort()
             # There can be duplicates if routines overridden
             prevname = ''
@@ -441,11 +431,10 @@ def not_all_langs():
     return None if enc.lower().startswith('utf') else sys.stdout.encoding
 
 def check_encoding(ctl):
-    problematic_enc = not_all_langs()
-    if problematic_enc:
-        ctl.output('Warning: sys.stdout.encoding is set to %s, so Unicode '
-                   'output may fail. Check your LANG and PYTHONIOENCODING '
-                   'environment settings.' % problematic_enc)
+    if problematic_enc := not_all_langs():
+        ctl.output(
+            f'Warning: sys.stdout.encoding is set to {problematic_enc}, so Unicode output may fail. Check your LANG and PYTHONIOENCODING environment settings.'
+        )
 
 class DefaultControllerPlugin(ControllerPluginBase):
     name = 'default'
@@ -464,10 +453,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
             # always sends a Connection: close header).  We use a
             # homegrown client based on asyncore instead.  This makes
             # me sad.
-            if self.listener is None:
-                listener = http_client.Listener()
-            else:
-                listener = self.listener # for unit tests
+            listener = http_client.Listener() if self.listener is None else self.listener
             handler = http_client.HTTPHandler(listener, username, password)
             handler.get(self.ctl.options.serverurl, path)
             asyncore.loop()
@@ -495,26 +481,21 @@ class DefaultControllerPlugin(ControllerPluginBase):
             self.help_tail()
             return
 
-        modifier = None
-
-        if args[0].startswith('-'):
-            modifier = args.pop(0)
-
+        modifier = args.pop(0) if args[0].startswith('-') else None
         if len(args) == 1:
             name = args[-1]
             channel = 'stdout'
-        else:
-            if args:
-                name = args[0]
-                channel = args[-1].lower()
-                if channel not in ('stderr', 'stdout'):
-                    self.ctl.output('Error: bad channel %r' % channel)
-                    self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
-                    return
-            else:
-                self.ctl.output('Error: tail requires process name')
+        elif args:
+            name = args[0]
+            channel = args[-1].lower()
+            if channel not in ('stderr', 'stdout'):
+                self.ctl.output('Error: bad channel %r' % channel)
                 self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 return
+        else:
+            self.ctl.output('Error: tail requires process name')
+            self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
+            return
 
         bytes = 1600
 
@@ -526,39 +507,37 @@ class DefaultControllerPlugin(ControllerPluginBase):
                 try:
                     bytes = int(what)
                 except:
-                    self.ctl.output('Error: bad argument %s' % modifier)
+                    self.ctl.output(f'Error: bad argument {modifier}')
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                     return
 
         supervisor = self.ctl.get_supervisor()
 
         if bytes is None:
-            return self._tailf('/logtail/%s/%s' % (name, channel))
+            return self._tailf(f'/logtail/{name}/{channel}')
 
-        else:
-            check_encoding(self.ctl)
-            try:
-                if channel == 'stdout':
-                    output = supervisor.readProcessStdoutLog(name,
-                                                             -bytes, 0)
-                else:
-                    output = supervisor.readProcessStderrLog(name,
-                                                             -bytes, 0)
-            except xmlrpclib.Fault as e:
-                self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
-                template = '%s: ERROR (%s)'
-                if e.faultCode == xmlrpc.Faults.NO_FILE:
-                    self.ctl.output(template % (name, 'no log file'))
-                elif e.faultCode == xmlrpc.Faults.FAILED:
-                    self.ctl.output(template % (name,
-                                             'unknown error reading log'))
-                elif e.faultCode == xmlrpc.Faults.BAD_NAME:
-                    self.ctl.output(template % (name,
-                                             'no such process name'))
-                else:
-                    raise
+        check_encoding(self.ctl)
+        try:
+            output = (
+                supervisor.readProcessStdoutLog(name, -bytes, 0)
+                if channel == 'stdout'
+                else supervisor.readProcessStderrLog(name, -bytes, 0)
+            )
+        except xmlrpclib.Fault as e:
+            self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
+            template = '%s: ERROR (%s)'
+            if e.faultCode == xmlrpc.Faults.NO_FILE:
+                self.ctl.output(template % (name, 'no log file'))
+            elif e.faultCode == xmlrpc.Faults.FAILED:
+                self.ctl.output(template % (name,
+                                         'unknown error reading log'))
+            elif e.faultCode == xmlrpc.Faults.BAD_NAME:
+                self.ctl.output(template % (name,
+                                         'no such process name'))
             else:
-                self.ctl.output(output)
+                raise
+        else:
+            self.ctl.output(output)
 
     def help_tail(self):
         self.ctl.output(
@@ -591,13 +570,13 @@ class DefaultControllerPlugin(ControllerPluginBase):
                 try:
                     what = int(what)
                 except:
-                    self.ctl.output('Error: bad argument %s' % args[0])
+                    self.ctl.output(f'Error: bad argument {args[0]}')
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                     return
                 else:
                     bytes = what
             else:
-                self.ctl.output('Error: bad argument %s' % args[0])
+                self.ctl.output(f'Error: bad argument {args[0]}')
                 self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 return
 
@@ -647,7 +626,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
             if len(namespecs[i]) > maxlen:
                 maxlen = len(namespecs[i])
 
-        template = '%(namespec)-' + str(maxlen+3) + 's%(state)-10s%(desc)s'
+        template = f'%(namespec)-{str(maxlen + 3)}s%(state)-10s%(desc)s'
         for i, info in enumerate(process_infos):
             line = template % {'namespec': namespecs[i],
                                'state': info['statename'],
@@ -686,9 +665,9 @@ class DefaultControllerPlugin(ControllerPluginBase):
 
                 if bad_name:
                     if process_name is None:
-                        msg = "%s: ERROR (no such group)" % group_name
+                        msg = f"{group_name}: ERROR (no such group)"
                     else:
-                        msg = "%s: ERROR (no such process)" % name
+                        msg = f"{name}: ERROR (no such process)"
                     self.ctl.output(msg)
                     self.ctl.exitstatus = LSBStatusExitStatuses.UNKNOWN
         self._show_statuses(matching_infos)
@@ -723,7 +702,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                 except xmlrpclib.Fault as e:
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                     if e.faultCode == xmlrpc.Faults.BAD_NAME:
-                        self.ctl.output('No such process %s' % name)
+                        self.ctl.output(f'No such process {name}')
                     else:
                         raise
                 else:
@@ -756,9 +735,9 @@ class DefaultControllerPlugin(ControllerPluginBase):
         elif code == xmlrpc.Faults.ABNORMAL_TERMINATION:
             return template % (name, 'abnormal termination')
         elif code == xmlrpc.Faults.SUCCESS:
-            return '%s: started' % name
+            return f'{name}: started'
         # assertion
-        raise ValueError('Unknown result code %s for %s' % (code, name))
+        raise ValueError(f'Unknown result code {code} for {name}')
 
     def do_start(self, arg):
         if not self.ctl.upcheck():
@@ -789,7 +768,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                             self.ctl.set_exitstatus_from_xmlrpc_fault(result['status'], xmlrpc.Faults.ALREADY_STARTED)
                     except xmlrpclib.Fault as e:
                         if e.faultCode == xmlrpc.Faults.BAD_NAME:
-                            error = "%s: ERROR (no such group)" % group_name
+                            error = f"{group_name}: ERROR (no such group)"
                             self.ctl.output(error)
                             self.ctl.exitstatus = LSBInitExitStatuses.INVALID_ARGS
                         else:
@@ -807,7 +786,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                         self.ctl.set_exitstatus_from_xmlrpc_fault(error['status'], xmlrpc.Faults.ALREADY_STARTED)
                     else:
                         name = make_namespec(group_name, process_name)
-                        self.ctl.output('%s: started' % name)
+                        self.ctl.output(f'{name}: started')
 
     def help_start(self):
         self.ctl.output("start <name>\t\tStart a process")
@@ -828,11 +807,11 @@ class DefaultControllerPlugin(ControllerPluginBase):
         elif code == xmlrpc.Faults.NOT_RUNNING:
             return template % (name, 'not running')
         elif code == xmlrpc.Faults.SUCCESS:
-            return '%s: %s' % (name, success)
+            return f'{name}: {success}'
         elif code == xmlrpc.Faults.FAILED:
             return fault_string
         # assertion
-        raise ValueError('Unknown result code %s for %s' % (code, name))
+        raise ValueError(f'Unknown result code {code} for {name}')
 
     def _stopresult(self, result):
         return self._signalresult(result, success='stopped')
@@ -867,11 +846,10 @@ class DefaultControllerPlugin(ControllerPluginBase):
                             self.ctl.set_exitstatus_from_xmlrpc_fault(result['status'], xmlrpc.Faults.NOT_RUNNING)
                     except xmlrpclib.Fault as e:
                         self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
-                        if e.faultCode == xmlrpc.Faults.BAD_NAME:
-                            error = "%s: ERROR (no such group)" % group_name
-                            self.ctl.output(error)
-                        else:
+                        if e.faultCode != xmlrpc.Faults.BAD_NAME:
                             raise
+                        error = f"{group_name}: ERROR (no such group)"
+                        self.ctl.output(error)
                 else:
                     try:
                         supervisor.stopProcess(name)
@@ -884,7 +862,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                         self.ctl.set_exitstatus_from_xmlrpc_fault(error['status'], xmlrpc.Faults.NOT_RUNNING)
                     else:
                         name = make_namespec(group_name, process_name)
-                        self.ctl.output('%s: stopped' % name)
+                        self.ctl.output(f'{name}: stopped')
 
     def help_stop(self):
         self.ctl.output("stop <name>\t\tStop a process")
@@ -926,12 +904,11 @@ class DefaultControllerPlugin(ControllerPluginBase):
                             self.ctl.output(self._signalresult(result))
                             self.ctl.set_exitstatus_from_xmlrpc_fault(result['status'])
                     except xmlrpclib.Fault as e:
-                        if e.faultCode == xmlrpc.Faults.BAD_NAME:
-                            error = "%s: ERROR (no such group)" % group_name
-                            self.ctl.output(error)
-                            self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
-                        else:
+                        if e.faultCode != xmlrpc.Faults.BAD_NAME:
                             raise
+                        error = f"{group_name}: ERROR (no such group)"
+                        self.ctl.output(error)
+                        self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 else:
                     try:
                         supervisor.signalProcess(name, sig)
@@ -944,7 +921,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                         self.ctl.set_exitstatus_from_xmlrpc_fault(error['status'])
                     else:
                         name = make_namespec(group_name, process_name)
-                        self.ctl.output('%s: signalled' % name)
+                        self.ctl.output(f'{name}: signalled')
 
     def help_signal(self):
         self.ctl.output("signal <signal name> <name>\t\tSignal a process")
@@ -1051,30 +1028,23 @@ class DefaultControllerPlugin(ControllerPluginBase):
         for n, t in [(added, 'available'),
                      (changed, 'changed'),
                      (dropped, 'disappeared')]:
-            changedict.update(dict(zip(n, [t] * len(n))))
+            changedict |= dict(zip(n, [t] * len(n)))
 
         if changedict:
-            names = list(changedict.keys())
-            names.sort()
+            names = sorted(changedict.keys())
             for name in names:
-                self.ctl.output("%s: %s" % (name, changedict[name]))
+                self.ctl.output(f"{name}: {changedict[name]}")
         else:
             self.ctl.output("No config updates to processes")
 
     def _formatConfigInfo(self, configinfo):
         name = make_namespec(configinfo['group'], configinfo['name'])
-        formatted = { 'name': name }
-        if configinfo['inuse']:
-            formatted['inuse'] = 'in use'
-        else:
-            formatted['inuse'] = 'avail'
-        if configinfo['autostart']:
-            formatted['autostart'] = 'auto'
-        else:
-            formatted['autostart'] = 'manual'
-        formatted['priority'] = "%s:%s" % (configinfo['group_prio'],
-                                           configinfo['process_prio'])
-
+        formatted = {
+            'name': name,
+            'inuse': 'in use' if configinfo['inuse'] else 'avail',
+            'autostart': 'auto' if configinfo['autostart'] else 'manual',
+            'priority': f"{configinfo['group_prio']}:{configinfo['process_prio']}",
+        }
         template = '%(name)-32s %(inuse)-9s %(autostart)-9s %(priority)s'
         return template % formatted
 
@@ -1116,7 +1086,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
             if e.faultCode == xmlrpc.Faults.SHUTDOWN_STATE:
                 self.ctl.output('ERROR: supervisor shutting down')
             elif e.faultCode == xmlrpc.Faults.CANT_REREAD:
-                self.ctl.output("ERROR: %s" % e.faultString)
+                self.ctl.output(f"ERROR: {e.faultString}")
             else:
                 raise
         else:
@@ -1139,13 +1109,13 @@ class DefaultControllerPlugin(ControllerPluginBase):
                 elif e.faultCode == xmlrpc.Faults.ALREADY_ADDED:
                     self.ctl.output('ERROR: process group already active')
                 elif e.faultCode == xmlrpc.Faults.BAD_NAME:
-                    self.ctl.output("ERROR: no such process/group: %s" % name)
+                    self.ctl.output(f"ERROR: no such process/group: {name}")
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 else:
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                     raise
             else:
-                self.ctl.output("%s: added process group" % name)
+                self.ctl.output(f"{name}: added process group")
 
     def help_add(self):
         self.ctl.output("add <name> [...]\tActivates any updates in config "
@@ -1161,14 +1131,13 @@ class DefaultControllerPlugin(ControllerPluginBase):
             except xmlrpclib.Fault as e:
                 self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 if e.faultCode == xmlrpc.Faults.STILL_RUNNING:
-                    self.ctl.output('ERROR: process/group still running: %s'
-                                      % name)
+                    self.ctl.output(f'ERROR: process/group still running: {name}')
                 elif e.faultCode == xmlrpc.Faults.BAD_NAME:
-                    self.ctl.output("ERROR: no such process/group: %s" % name)
+                    self.ctl.output(f"ERROR: no such process/group: {name}")
                 else:
                     raise
             else:
-                self.ctl.output("%s: removed process group" % name)
+                self.ctl.output(f"{name}: removed process group")
 
     def help_remove(self):
         self.ctl.output("remove <name> [...]\tRemoves process/group from "
@@ -1176,7 +1145,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
 
     def do_update(self, arg):
         def log(name, message):
-            self.ctl.output("%s: %s" % (name, message))
+            self.ctl.output(f"{name}: {message}")
 
         supervisor = self.ctl.get_supervisor()
         try:
@@ -1208,7 +1177,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
 
             for gname in valid_gnames:
                 if gname not in groups:
-                    self.ctl.output('ERROR: no such group: %s' % gname)
+                    self.ctl.output(f'ERROR: no such group: {gname}')
                     self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
 
         for gname in removed:
@@ -1220,7 +1189,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
             fails = [res for res in results
                      if res['status'] == xmlrpc.Faults.FAILED]
             if fails:
-                self.ctl.output("%s: %s" % (gname, "has problems; not removing"))
+                self.ctl.output(f"{gname}: has problems; not removing")
                 self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
                 continue
             supervisor.removeProcessGroup(gname)
@@ -1256,8 +1225,8 @@ class DefaultControllerPlugin(ControllerPluginBase):
         elif code == xmlrpc.Faults.FAILED:
             return template % (name, 'failed')
         elif code == xmlrpc.Faults.SUCCESS:
-            return '%s: cleared' % name
-        raise ValueError('Unknown result code %s for %s' % (code, name))
+            return f'{name}: cleared'
+        raise ValueError(f'Unknown result code {code} for {name}')
 
     def do_clear(self, arg):
         if not self.ctl.upcheck():
@@ -1292,7 +1261,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                     self.ctl.set_exitstatus_from_xmlrpc_fault(error['status'])
                 else:
                     name = make_namespec(group_name, process_name)
-                    self.ctl.output('%s: cleared' % name)
+                    self.ctl.output(f'{name}: cleared')
 
     def help_clear(self):
         self.ctl.output("clear <name>\t\tClear a process' log files.")
@@ -1359,7 +1328,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                 self.ctl.output('ERROR: bad process name supplied')
                 self.ctl.exitstatus = LSBInitExitStatuses.GENERIC
             else:
-                self.ctl.output('ERROR: ' + str(e))
+                self.ctl.output(f'ERROR: {str(e)}')
             return
 
         if info['state'] != states.ProcessStates.RUNNING:
@@ -1384,7 +1353,7 @@ class DefaultControllerPlugin(ControllerPluginBase):
                     if e.faultCode == xmlrpc.Faults.NOT_RUNNING:
                         self.ctl.output('Process got killed')
                     else:
-                        self.ctl.output('ERROR: ' + str(e))
+                        self.ctl.output(f'ERROR: {str(e)}')
                     self.ctl.output('Exiting foreground')
                     a.kill()
                     return

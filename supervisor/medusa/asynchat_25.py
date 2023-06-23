@@ -84,7 +84,7 @@ class async_chat (asyncore.dispatcher):
     # check for the terminator,
     # if found, transition to the next state.
 
-    def handle_read (self):
+    def handle_read(self):
         try:
             data = self.recv (self.ac_in_buffer_size)
         except socket.error:
@@ -105,7 +105,7 @@ class async_chat (asyncore.dispatcher):
                 # no terminator, collect it all
                 self.collect_incoming_data (self.ac_in_buffer)
                 self.ac_in_buffer = b''
-            elif isinstance(terminator, int) or isinstance(terminator, long):
+            elif isinstance(terminator, (int, long)):
                 # numeric terminator
                 n = terminator
                 if lb < n:
@@ -135,19 +135,16 @@ class async_chat (asyncore.dispatcher):
                     self.ac_in_buffer = self.ac_in_buffer[index+terminator_len:]
                     # This does the Right Thing if the terminator is changed here.
                     self.found_terminator()
+                elif index := find_prefix_at_end(self.ac_in_buffer, terminator):
+                    if index != lb:
+                        # we found a prefix, collect up to the prefix
+                        self.collect_incoming_data (self.ac_in_buffer[:-index])
+                        self.ac_in_buffer = self.ac_in_buffer[-index:]
+                    break
                 else:
-                    # check for a prefix of the terminator
-                    index = find_prefix_at_end (self.ac_in_buffer, terminator)
-                    if index:
-                        if index != lb:
-                            # we found a prefix, collect up to the prefix
-                            self.collect_incoming_data (self.ac_in_buffer[:-index])
-                            self.ac_in_buffer = self.ac_in_buffer[-index:]
-                        break
-                    else:
-                        # no prefix, collect it all
-                        self.collect_incoming_data (self.ac_in_buffer)
-                        self.ac_in_buffer = b''
+                    # no prefix, collect it all
+                    self.collect_incoming_data (self.ac_in_buffer)
+                    self.ac_in_buffer = b''
 
     def handle_write (self):
         self.initiate_send ()
@@ -184,31 +181,29 @@ class async_chat (asyncore.dispatcher):
 
     # refill the outgoing buffer by calling the more() method
     # of the first producer in the queue
-    def refill_buffer (self):
+    def refill_buffer(self):
         while 1:
-            if len(self.producer_fifo):
-                p = self.producer_fifo.first()
-                # a 'None' in the producer fifo is a sentinel,
-                # telling us to close the channel.
-                if p is None:
-                    if not self.ac_out_buffer:
-                        self.producer_fifo.pop()
-                        self.close()
-                    return
-                elif isinstance(p, bytes):
-                    self.producer_fifo.pop()
-                    self.ac_out_buffer += p
-                    return
-                data = p.more()
-                if data:
-                    self.ac_out_buffer = self.ac_out_buffer + data
-                    return
-                else:
-                    self.producer_fifo.pop()
-            else:
+            if not len(self.producer_fifo):
                 return
+            p = self.producer_fifo.first()
+            # a 'None' in the producer fifo is a sentinel,
+            # telling us to close the channel.
+            if p is None:
+                if not self.ac_out_buffer:
+                    self.producer_fifo.pop()
+                    self.close()
+                return
+            elif isinstance(p, bytes):
+                self.producer_fifo.pop()
+                self.ac_out_buffer += p
+                return
+            if data := p.more():
+                self.ac_out_buffer = self.ac_out_buffer + data
+                return
+            else:
+                self.producer_fifo.pop()
 
-    def initiate_send (self):
+    def initiate_send(self):
         obs = self.ac_out_buffer_size
         # try to refill the buffer
         if len (self.ac_out_buffer) < obs:
@@ -217,8 +212,7 @@ class async_chat (asyncore.dispatcher):
         if self.ac_out_buffer and self.connected:
             # try to send the buffer
             try:
-                num_sent = self.send (self.ac_out_buffer[:obs])
-                if num_sent:
+                if num_sent := self.send(self.ac_out_buffer[:obs]):
                     self.ac_out_buffer = self.ac_out_buffer[num_sent:]
 
             except socket.error:
@@ -239,22 +233,19 @@ class simple_producer:
         self.data = data
         self.buffer_size = buffer_size
 
-    def more (self):
+    def more(self):
         if len (self.data) > self.buffer_size:
             result = self.data[:self.buffer_size]
             self.data = self.data[self.buffer_size:]
-            return result
         else:
             result = self.data
             self.data = b''
-            return result
+
+        return result
 
 class fifo:
-    def __init__ (self, list=None):
-        if not list:
-            self.list = []
-        else:
-            self.list = list
+    def __init__(self, list=None):
+        self.list = [] if not list else list
 
     def __len__ (self):
         return len(self.list)
@@ -268,11 +259,8 @@ class fifo:
     def push (self, data):
         self.list.append(data)
 
-    def pop (self):
-        if self.list:
-            return 1, self.list.pop(0)
-        else:
-            return 0, None
+    def pop(self):
+        return (1, self.list.pop(0)) if self.list else (0, None)
 
 # Given 'haystack', see if any prefix of 'needle' is at its end.  This
 # assumes an exact match has already been checked.  Return the number of

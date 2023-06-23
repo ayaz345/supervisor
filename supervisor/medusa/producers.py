@@ -20,15 +20,15 @@ class simple_producer:
         self.data = data
         self.buffer_size = buffer_size
 
-    def more (self):
+    def more(self):
         if len (self.data) > self.buffer_size:
             result = self.data[:self.buffer_size]
             self.data = self.data[self.buffer_size:]
-            return result
         else:
             result = self.data
             self.data = b''
-            return result
+
+        return result
 
 class scanning_producer:
     """like simple_producer, but more efficient for large strings"""
@@ -37,18 +37,17 @@ class scanning_producer:
         self.buffer_size = buffer_size
         self.pos = 0
 
-    def more (self):
-        if self.pos < len(self.data):
-            lp = self.pos
-            rp = min (
-                    len(self.data),
-                    self.pos + self.buffer_size
-                    )
-            result = self.data[lp:rp]
-            self.pos += len(result)
-            return result
-        else:
+    def more(self):
+        if self.pos >= len(self.data):
             return b''
+        lp = self.pos
+        rp = min (
+                len(self.data),
+                self.pos + self.buffer_size
+                )
+        result = self.data[lp:rp]
+        self.pos += len(result)
+        return result
 
 class lines_producer:
     """producer for a list of lines"""
@@ -73,13 +72,12 @@ class buffer_list_producer:
         self.index = 0
         self.buffers = buffers
 
-    def more (self):
+    def more(self):
         if self.index >= len(self.buffers):
             return b''
-        else:
-            data = self.buffers[self.index]
-            self.index += 1
-            return data
+        data = self.buffers[self.index]
+        self.index += 1
+        return data
 
 class file_producer:
     """producer wrapper for file[-like] objects"""
@@ -91,18 +89,15 @@ class file_producer:
         self.done = 0
         self.file = file
 
-    def more (self):
+    def more(self):
         if self.done:
             return b''
-        else:
-            data = self.file.read (self.out_buffer_size)
-            if not data:
-                self.file.close()
-                del self.file
-                self.done = 1
-                return b''
-            else:
-                return data
+        if data := self.file.read(self.out_buffer_size):
+            return data
+        self.file.close()
+        del self.file
+        self.done = 1
+        return b''
 
 # A simple output producer.  This one does not [yet] have
 # the safety feature builtin to the monitor channel:  runaway
@@ -146,11 +141,10 @@ class composite_producer:
     def __init__ (self, producers):
         self.producers = producers
 
-    def more (self):
+    def more(self):
         while len(self.producers):
             p = self.producers[0]
-            d = p.more()
-            if d:
+            if d := p.more():
                 return d
             else:
                 self.producers.pop(0)
@@ -170,10 +164,9 @@ class globbing_producer:
         self.buffer = b''
         self.buffer_size = buffer_size
 
-    def more (self):
+    def more(self):
         while len(self.buffer) < self.buffer_size:
-            data = self.producer.more()
-            if data:
+            if data := self.producer.more():
                 self.buffer = self.buffer + data
             else:
                 break
@@ -194,17 +187,16 @@ class hooked_producer:
         self.function = function
         self.bytes = 0
 
-    def more (self):
-        if self.producer:
-            result = self.producer.more()
-            if not result:
-                self.producer = None
-                self.function (self.bytes)
-            else:
-                self.bytes += len(result)
-            return result
-        else:
+    def more(self):
+        if not self.producer:
             return ''
+        result = self.producer.more()
+        if not result:
+            self.producer = None
+            self.function (self.bytes)
+        else:
+            self.bytes += len(result)
+        return result
 
 # HTTP 1.1 emphasizes that an advertised Content-Length header MUST be
 # correct.  In the face of Strange Files, it is conceivable that
@@ -228,20 +220,19 @@ class chunked_producer:
         self.producer = producer
         self.footers = footers
 
-    def more (self):
-        if self.producer:
-            data = self.producer.more()
-            if data:
-                s = '%x' % len(data)
-                return as_bytes(s) + b'\r\n' + data + b'\r\n'
-            else:
-                self.producer = None
-                if self.footers:
-                    return b'\r\n'.join([b'0'] + self.footers) + b'\r\n\r\n'
-                else:
-                    return b'0\r\n\r\n'
-        else:
+    def more(self):
+        if not self.producer:
             return b''
+        if data := self.producer.more():
+            s = '%x' % len(data)
+            return as_bytes(s) + b'\r\n' + data + b'\r\n'
+        else:
+            self.producer = None
+            return (
+                b'\r\n'.join([b'0'] + self.footers) + b'\r\n\r\n'
+                if self.footers
+                else b'0\r\n\r\n'
+            )
 
 try:
     import zlib
@@ -265,20 +256,18 @@ class compressed_producer:
         self.producer = producer
         self.compressor = zlib.compressobj (level)
 
-    def more (self):
-        if self.producer:
-            cdata = b''
-            # feed until we get some output
-            while not cdata:
-                data = self.producer.more()
-                if not data:
-                    self.producer = None
-                    return self.compressor.flush()
-                else:
-                    cdata = self.compressor.compress (data)
-            return cdata
-        else:
+    def more(self):
+        if not self.producer:
             return b''
+        cdata = b''
+            # feed until we get some output
+        while not cdata:
+            if data := self.producer.more():
+                cdata = self.compressor.compress (data)
+            else:
+                self.producer = None
+                return self.compressor.flush()
+        return cdata
 
 class escaping_producer:
 
@@ -292,16 +281,13 @@ class escaping_producer:
         self.buffer = b''
         self.find_prefix_at_end = find_prefix_at_end
 
-    def more (self):
+    def more(self):
         esc_from = self.esc_from
         esc_to   = self.esc_to
 
-        buffer = self.buffer + self.producer.more()
-
-        if buffer:
+        if buffer := self.buffer + self.producer.more():
             buffer = buffer.replace(esc_from, esc_to)
-            i = self.find_prefix_at_end (buffer, esc_from)
-            if i:
+            if i := self.find_prefix_at_end(buffer, esc_from):
                 # we found a prefix
                 self.buffer = buffer[-i:]
                 return buffer[:-i]

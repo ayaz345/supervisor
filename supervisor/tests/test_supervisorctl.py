@@ -80,7 +80,7 @@ class ControllerTests(unittest.TestCase):
     def test_ctor(self):
         options = DummyClientOptions()
         controller = self._makeOne(options)
-        self.assertEqual(controller.prompt, options.prompt + '> ')
+        self.assertEqual(controller.prompt, f'{options.prompt}> ')
 
     def test__upcheck(self):
         options = DummyClientOptions()
@@ -448,8 +448,7 @@ class TestControllerPluginBase(unittest.TestCase):
         klass = self._getTargetClass()
         options = DummyClientOptions()
         ctl = DummyController(options)
-        plugin = klass(ctl, *arg, **kw)
-        return plugin
+        return klass(ctl, *arg, **kw)
 
     def test_do_help_noarg(self):
         plugin = self._makeOne()
@@ -480,8 +479,7 @@ class TestDefaultControllerPlugin(unittest.TestCase):
         klass = self._getTargetClass()
         options = DummyClientOptions()
         ctl = DummyController(options)
-        plugin = klass(ctl, *arg, **kw)
-        return plugin
+        return klass(ctl, *arg, **kw)
 
     def test_tail_toofewargs(self):
         plugin = self._makeOne()
@@ -2040,10 +2038,7 @@ class DummyController:
 
     def get_server_proxy(self, namespace=None):
         proxy = self.options.getServerProxy()
-        if namespace is None:
-            return proxy
-        else:
-            return getattr(proxy, namespace)
+        return proxy if namespace is None else getattr(proxy, namespace)
 
     def output(self, data):
         self.stdout.write(data + '\n')

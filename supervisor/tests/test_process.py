@@ -171,7 +171,7 @@ class SubprocessTests(unittest.TestCase):
     def test_get_execv_args_rel_searches_using_pconfig_path(self):
         with tempfile.NamedTemporaryFile() as f:
             dirname, basename = os.path.split(f.name)
-            executable = '%s foo' % basename
+            executable = f'{basename} foo'
             options = DummyOptions()
             config = DummyPConfig(options, 'sh', executable)
             config.get_path = lambda: [ dirname ]
@@ -264,7 +264,7 @@ class SubprocessTests(unittest.TestCase):
         self.assertEqual(result, None)
         msg = "unknown error making dispatchers for 'good': EPERM"
         self.assertEqual(instance.spawnerr, msg)
-        self.assertEqual(options.logger.data[0], "spawnerr: %s" % msg)
+        self.assertEqual(options.logger.data[0], f"spawnerr: {msg}")
         self.assertTrue(instance.delay)
         self.assertTrue(instance.backoff)
         from supervisor.states import ProcessStates
@@ -280,6 +280,7 @@ class SubprocessTests(unittest.TestCase):
                               stdout_logfile='/a/directory') # not a file
         def raise_eisdir(envelope):
             raise IOError(errno.EISDIR)
+
         config.make_dispatchers = raise_eisdir
         instance = self._makeOne(config)
         from supervisor.states import ProcessStates
@@ -291,7 +292,7 @@ class SubprocessTests(unittest.TestCase):
         self.assertEqual(result, None)
         msg = "unknown error making dispatchers for 'cat': EISDIR"
         self.assertEqual(instance.spawnerr, msg)
-        self.assertEqual(options.logger.data[0], "spawnerr: %s" % msg)
+        self.assertEqual(options.logger.data[0], f"spawnerr: {msg}")
         self.assertTrue(instance.delay)
         self.assertTrue(instance.backoff)
         from supervisor.states import ProcessStates
@@ -316,7 +317,7 @@ class SubprocessTests(unittest.TestCase):
         self.assertEqual(result, None)
         msg = "Too many processes in process table to spawn 'good'"
         self.assertEqual(instance.spawnerr, msg)
-        self.assertEqual(options.logger.data[0], "spawnerr: %s" % msg)
+        self.assertEqual(options.logger.data[0], f"spawnerr: {msg}")
         self.assertEqual(len(options.parent_pipes_closed), 6)
         self.assertEqual(len(options.child_pipes_closed), 6)
         self.assertTrue(instance.delay)
@@ -343,7 +344,7 @@ class SubprocessTests(unittest.TestCase):
         self.assertEqual(result, None)
         msg = "unknown error during fork for 'good': EPERM"
         self.assertEqual(instance.spawnerr, msg)
-        self.assertEqual(options.logger.data[0], "spawnerr: %s" % msg)
+        self.assertEqual(options.logger.data[0], f"spawnerr: {msg}")
         self.assertEqual(len(options.parent_pipes_closed), 6)
         self.assertEqual(len(options.child_pipes_closed), 6)
         self.assertTrue(instance.delay)
@@ -890,18 +891,19 @@ class SubprocessTests(unittest.TestCase):
         options.kill_exception = OSError(errno.ESRCH,
                                          os.strerror(errno.ESRCH))
         instance = self._makeOne(config)
-        L = []
         from supervisor.states import ProcessStates
         from supervisor import events
+        L = []
         events.subscribe(events.ProcessStateEvent, lambda x: L.append(x))
         instance.pid = 11
         instance.state = ProcessStates.RUNNING
         instance.kill(signal.SIGTERM)
         self.assertEqual(options.logger.data[0], 'killing test (pid 11) with '
             'signal SIGTERM')
-        self.assertEqual(options.logger.data[1], 'unable to signal test (pid 11), '
-            'it probably just exited on its own: %s' %
-            str(options.kill_exception))
+        self.assertEqual(
+            options.logger.data[1],
+            f'unable to signal test (pid 11), it probably just exited on its own: {str(options.kill_exception)}',
+        )
         self.assertTrue(instance.killing)
         self.assertEqual(instance.pid, 11) # unchanged
         self.assertEqual(instance.state, ProcessStates.STOPPING)
@@ -1010,18 +1012,19 @@ class SubprocessTests(unittest.TestCase):
         options.kill_exception = OSError(errno.ESRCH,
                                          os.strerror(errno.ESRCH))
         instance = self._makeOne(config)
-        L = []
         from supervisor.states import ProcessStates
         from supervisor import events
+        L = []
         events.subscribe(events.ProcessStateEvent, lambda x: L.append(x))
         instance.pid = 11
         instance.state = ProcessStates.RUNNING
         instance.signal(signal.SIGWINCH)
         self.assertEqual(options.logger.data[0],
             'sending test (pid 11) sig SIGWINCH')
-        self.assertEqual(options.logger.data[1], 'unable to signal test (pid 11), '
-            'it probably just now exited on its own: %s' %
-            str(options.kill_exception))
+        self.assertEqual(
+            options.logger.data[1],
+            f'unable to signal test (pid 11), it probably just now exited on its own: {str(options.kill_exception)}',
+        )
         self.assertFalse(instance.killing)
         self.assertEqual(instance.state, ProcessStates.RUNNING) # unchanged
         self.assertEqual(instance.pid, 11) # unchanged

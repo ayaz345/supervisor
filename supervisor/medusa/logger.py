@@ -41,8 +41,8 @@ class file_logger:
             self.file = file
         self.do_flush = flush
 
-    def __repr__ (self):
-        return '<file logger: %s>' % self.file
+    def __repr__(self):
+        return f'<file logger: {self.file}>'
 
     def write (self, data):
         self.file.write (data)
@@ -91,8 +91,8 @@ class rotating_file_logger (file_logger):
         self.maxsize = maxsize
         self.rotate_when = self.next_backup(self.freq)
 
-    def __repr__ (self):
-        return '<rotating-file logger: %s>' % self.file
+    def __repr__(self):
+        return f'<rotating-file logger: {self.file}>'
 
     # We back up at midnight every 1) day, 2) monday, or 3) 1st of month
     def next_backup (self, freq):
@@ -151,8 +151,8 @@ class socket_logger (asynchat.async_chat):
         self.connect (address)
         self.address = address
 
-    def __repr__ (self):
-        return '<socket logger: address=%s>' % self.address
+    def __repr__(self):
+        return f'<socket logger: address={self.address}>'
 
     def log (self, message):
         if message[-2:] != '\r\n':
@@ -165,8 +165,8 @@ class multi_logger:
     def __init__ (self, loggers):
         self.loggers = loggers
 
-    def __repr__ (self):
-        return '<multi logger: %s>' % (repr(self.loggers))
+    def __repr__(self):
+        return f'<multi logger: {repr(self.loggers)}>'
 
     def log (self, message):
         for logger in self.loggers:
@@ -186,10 +186,10 @@ class resolving_logger:
             self.message = message
             self.logger = logger
 
-        def __call__ (self, host, ttl, answer):
+        def __call__(self, host, ttl, answer):
             if not answer:
                 answer = host
-            self.logger.log ('%s:%s' % (answer, self.message))
+            self.logger.log(f'{answer}:{self.message}')
 
     def log (self, ip, message):
         self.resolver.resolve_ptr (
@@ -205,8 +205,8 @@ class unresolving_logger:
     def __init__ (self, logger):
         self.logger = logger
 
-    def log (self, ip, message):
-        self.logger.log ('%s:%s' % (ip, message))
+    def log(self, ip, message):
+        self.logger.log(f'{ip}:{message}')
 
 
 def strip_eol (line):

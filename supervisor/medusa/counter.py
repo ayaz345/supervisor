@@ -47,9 +47,7 @@ class counter:
     def __repr__ (self):
         return '<counter value=%s at %x>' % (self.value, id(self))
 
-    def __str__ (self):
+    def __str__(self):
         s = str(long(self.value))
-        if s[-1:] == 'L':
-            s = s[:-1]
-        return s
+        return s.removesuffix('L')
 

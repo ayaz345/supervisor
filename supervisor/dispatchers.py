@@ -24,10 +24,7 @@ class PDispatcher:
         self.closed = False     # True if close() has been called
 
     def __repr__(self):
-        return '<%s at %s for %s (%s)>' % (self.__class__.__name__,
-                                           id(self),
-                                           self.process,
-                                           self.channel)
+        return f'<{self.__class__.__name__} at {id(self)} for {self.process} ({self.channel})>'
 
     def readable(self):
         raise NotImplementedError
@@ -45,19 +42,15 @@ class PDispatcher:
         nil, t, v, tbinfo = compact_traceback()
 
         self.process.config.options.logger.critical(
-            'uncaptured python exception, closing channel %s (%s:%s %s)' % (
-                repr(self),
-                t,
-                v,
-                tbinfo
-                )
-            )
+            f'uncaptured python exception, closing channel {repr(self)} ({t}:{v} {tbinfo})'
+        )
         self.close()
 
     def close(self):
         if not self.closed:
             self.process.config.options.logger.debug(
-                'fd %s closed, stopped monitoring %s' % (self.fd, self))
+                f'fd {self.fd} closed, stopped monitoring {self}'
+            )
             self.closed = True
 
     def flush(self):
@@ -117,10 +110,10 @@ class POutputDispatcher(PDispatcher):
         config = self.process.config
         channel = self.channel
 
-        logfile = getattr(config, '%s_logfile' % channel)
-        maxbytes = getattr(config, '%s_logfile_maxbytes' % channel)
-        backups = getattr(config, '%s_logfile_backups' % channel)
-        to_syslog = getattr(config, '%s_syslog' % channel)
+        logfile = getattr(config, f'{channel}_logfile')
+        maxbytes = getattr(config, f'{channel}_logfile_maxbytes')
+        backups = getattr(config, f'{channel}_logfile_backups')
+        to_syslog = getattr(config, f'{channel}_syslog')
 
         if logfile or to_syslog:
             self.normallog = config.options.getLogger()
@@ -136,10 +129,7 @@ class POutputDispatcher(PDispatcher):
             )
 
         if to_syslog:
-            loggers.handle_syslog(
-                self.normallog,
-                fmt=config.name + ' %(message)s'
-            )
+            loggers.handle_syslog(self.normallog, fmt=f'{config.name} %(message)s')
 
     def _init_capturelog(self):
         """
@@ -147,9 +137,9 @@ class POutputDispatcher(PDispatcher):
         temporarily capture output when special output is detected.
         Sets self.capturelog if capturing is enabled.
         """
-        capture_maxbytes = getattr(self.process.config,
-                                   '%s_capture_maxbytes' % self.channel)
-        if capture_maxbytes:
+        if capture_maxbytes := getattr(
+            self.process.config, f'{self.channel}_capture_maxbytes'
+        ):
             self.capturelog = self.process.config.options.getLogger()
             loggers.handle_boundIO(
                 self.capturelog,
@@ -171,36 +161,36 @@ class POutputDispatcher(PDispatcher):
                     handler.reopen()
 
     def _log(self, data):
-        if data:
-            config = self.process.config
-            if config.options.strip_ansi:
-                data = stripEscapes(data)
-            if self.childlog:
-                self.childlog.info(data)
-            if self.log_to_mainlog:
-                if not isinstance(data, bytes):
-                    text = data
-                else:
-                    try:
-                        text = data.decode('utf-8')
-                    except UnicodeDecodeError:
-                        text = 'Undecodable: %r' % data
-                msg = '%(name)r %(channel)s output:\n%(data)s'
-                config.options.logger.log(
-                    self.mainlog_level, msg, name=config.name,
-                    channel=self.channel, data=text)
-            if self.channel == 'stdout':
-                if self.stdout_events_enabled:
-                    notify(
-                        ProcessLogStdoutEvent(self.process,
-                            self.process.pid, data)
-                    )
-            else: # channel == stderr
-                if self.stderr_events_enabled:
-                    notify(
-                        ProcessLogStderrEvent(self.process,
-                            self.process.pid, data)
-                    )
+        if not data:
+            return
+        config = self.process.config
+        if config.options.strip_ansi:
+            data = stripEscapes(data)
+        if self.childlog:
+            self.childlog.info(data)
+        if self.log_to_mainlog:
+            if not isinstance(data, bytes):
+                text = data
+            else:
+                try:
+                    text = data.decode('utf-8')
+                except UnicodeDecodeError:
+                    text = 'Undecodable: %r' % data
+            msg = '%(name)r %(channel)s output:\n%(data)s'
+            config.options.logger.log(
+                self.mainlog_level, msg, name=config.name,
+                channel=self.channel, data=text)
+        if self.channel == 'stdout':
+            if self.stdout_events_enabled:
+                notify(
+                    ProcessLogStdoutEvent(self.process,
+                        self.process.pid, data)
+                )
+        elif self.stderr_events_enabled:
+            notify(
+                ProcessLogStderrEvent(self.process,
+                    self.process.pid, data)
+            )
 
     def record_output(self):
         if self.capturelog is None:
@@ -225,9 +215,8 @@ class POutputDispatcher(PDispatcher):
             before, after = data.split(token, 1)
         except ValueError:
             after = None
-            index = find_prefix_at_end(data, token)
-            if index:
-                self.output_buffer = self.output_buffer + data[-index:]
+            if index := find_prefix_at_end(data, token):
+                self.output_buffer += data[-index:]
                 data = data[:-index]
             self._log(data)
         else:
@@ -266,9 +255,7 @@ class POutputDispatcher(PDispatcher):
         return False
 
     def readable(self):
-        if self.closed:
-            return False
-        return True
+        return not self.closed
 
     def handle_read_event(self):
         data = self.process.config.options.readfd(self.fd)
@@ -300,11 +287,9 @@ class PEventListenerDispatcher(PDispatcher):
         self.result = b''
         self.resultlen = None
 
-        logfile = getattr(process.config, '%s_logfile' % channel)
-
-        if logfile:
-            maxbytes = getattr(process.config, '%s_logfile_maxbytes' % channel)
-            backups = getattr(process.config, '%s_logfile_backups' % channel)
+        if logfile := getattr(process.config, f'{channel}_logfile'):
+            maxbytes = getattr(process.config, f'{channel}_logfile_maxbytes')
+            backups = getattr(process.config, f'{channel}_logfile_backups')
             self.childlog = process.config.options.getLogger()
             loggers.handle_file(
                 self.childlog,
@@ -331,13 +316,10 @@ class PEventListenerDispatcher(PDispatcher):
         return False
 
     def readable(self):
-        if self.closed:
-            return False
-        return True
+        return not self.closed
 
     def handle_read_event(self):
-        data = self.process.config.options.readfd(self.fd)
-        if data:
+        if data := self.process.config.options.readfd(self.fd):
             self.state_buffer += data
             procname = self.process.config.name
             msg = '%r %s output:\n%s' % (procname, self.channel, data)
@@ -449,34 +431,28 @@ class PEventListenerDispatcher(PDispatcher):
 
         try:
             self.process.group.config.result_handler(process.event, result)
-            logger.debug('%s: event was processed' % procname)
+            logger.debug(f'{procname}: event was processed')
             self._change_listener_state(EventListenerStates.ACKNOWLEDGED)
         except RejectEvent:
-            logger.warn('%s: event was rejected' % procname)
+            logger.warn(f'{procname}: event was rejected')
             self._change_listener_state(EventListenerStates.ACKNOWLEDGED)
             notify(EventRejectedEvent(process, process.event))
         except:
-            logger.warn('%s: event caused an error' % procname)
+            logger.warn(f'{procname}: event caused an error')
             self._change_listener_state(EventListenerStates.UNKNOWN)
             notify(EventRejectedEvent(process, process.event))
 
     def _change_listener_state(self, new_state):
         process = self.process
-        procname = process.config.name
         old_state = process.listener_state
 
-        msg = '%s: %s -> %s' % (
-            procname,
-            getEventListenerStateDescription(old_state),
-            getEventListenerStateDescription(new_state)
-            )
+        procname = process.config.name
+        msg = f'{procname}: {getEventListenerStateDescription(old_state)} -> {getEventListenerStateDescription(new_state)}'
         process.config.options.logger.debug(msg)
 
         process.listener_state = new_state
         if new_state == EventListenerStates.UNKNOWN:
-            msg = ('%s: has entered the UNKNOWN state and will no longer '
-                   'receive events, this usually indicates the process '
-                   'violated the eventlistener protocol' % procname)
+            msg = f'{procname}: has entered the UNKNOWN state and will no longer receive events, this usually indicates the process violated the eventlistener protocol'
             process.config.options.logger.warn(msg)
 
 class PInputDispatcher(PDispatcher):
@@ -487,9 +463,7 @@ class PInputDispatcher(PDispatcher):
         self.input_buffer = b''
 
     def writable(self):
-        if self.input_buffer and not self.closed:
-            return True
-        return False
+        return bool(self.input_buffer and not self.closed)
 
     def readable(self):
         return False
@@ -505,11 +479,10 @@ class PInputDispatcher(PDispatcher):
             try:
                 self.flush()
             except OSError as why:
-                if why.args[0] == errno.EPIPE:
-                    self.input_buffer = b''
-                    self.close()
-                else:
+                if why.args[0] != errno.EPIPE:
                     raise
+                self.input_buffer = b''
+                self.close()
 
 ANSI_ESCAPE_BEGIN = b'\x1b['
 ANSI_TERMINATORS = (b'H', b'f', b'A', b'B', b'C', b'D', b'R', b's', b'u', b'J',
@@ -530,10 +503,9 @@ def stripEscapes(s):
             n = s.find(ANSI_ESCAPE_BEGIN, i)
             if n == -1:
                 return result + s[i:]
-            else:
-                result = result + s[i:n]
-                i = n
-                show = 0
+            result = result + s[i:n]
+            i = n
+            show = 0
         i += 1
     return result
 

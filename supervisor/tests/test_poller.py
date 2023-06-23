@@ -282,10 +282,7 @@ class KQueuePollerTests(KQueuePollerTestsBase):
         self.assertEqual(kevent.filter, filter)
         self.assertEqual(kevent.flags, flags)
 
-if implements_poll():
-    PollerPollTestsBase = unittest.TestCase
-else:
-    PollerPollTestsBase = SkipTestCase
+PollerPollTestsBase = unittest.TestCase if implements_poll() else SkipTestCase
 
 class PollerPollTests(PollerPollTestsBase):
 

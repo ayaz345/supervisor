@@ -38,12 +38,9 @@ class HandlerTests:
 
     def _makeLogRecord(self, msg):
         from supervisor import loggers
-        record = loggers.LogRecord(
-            level=loggers.LevelsByName.INFO,
-            msg=msg,
-            exc_info=None
-            )
-        return record
+        return loggers.LogRecord(
+            level=loggers.LevelsByName.INFO, msg=msg, exc_info=None
+        )
 
 class BareHandlerTests(HandlerTests, unittest.TestCase):
     def _getTargetClass(self):
@@ -221,11 +218,7 @@ class FileHandlerTests(HandlerTests, unittest.TestCase):
         self.assertTrue(dummy_stderr.written.endswith(b'OSError\n'),
                         dummy_stderr.written)
 
-if os.path.exists('/dev/stdout'):
-    StdoutTestsBase = FileHandlerTests
-else:
-    # Skip the stdout tests on platforms that don't have /dev/stdout.
-    StdoutTestsBase = object
+StdoutTestsBase = FileHandlerTests if os.path.exists('/dev/stdout') else object
 
 class StdoutTests(StdoutTestsBase):
     def test_ctor_with_dev_stdout(self):
@@ -255,41 +248,41 @@ class RotatingFileHandlerTests(FileHandlerTests):
         record = self._makeLogRecord(b'a' * 4)
 
         handler.emit(record) # 4 bytes
-        self.assertFalse(os.path.exists(self.filename + '.1'))
-        self.assertFalse(os.path.exists(self.filename + '.2'))
+        self.assertFalse(os.path.exists(f'{self.filename}.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 8 bytes
-        self.assertFalse(os.path.exists(self.filename + '.1'))
-        self.assertFalse(os.path.exists(self.filename + '.2'))
+        self.assertFalse(os.path.exists(f'{self.filename}.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 12 bytes, do rollover
-        self.assertTrue(os.path.exists(self.filename + '.1'))
-        self.assertFalse(os.path.exists(self.filename + '.2'))
+        self.assertTrue(os.path.exists(f'{self.filename}.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 16 bytes
-        self.assertTrue(os.path.exists(self.filename + '.1'))
-        self.assertFalse(os.path.exists(self.filename + '.2'))
+        self.assertTrue(os.path.exists(f'{self.filename}.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 20 bytes
-        self.assertTrue(os.path.exists(self.filename + '.1'))
-        self.assertFalse(os.path.exists(self.filename + '.2'))
+        self.assertTrue(os.path.exists(f'{self.filename}.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 24 bytes, do rollover
-        self.assertTrue(os.path.exists(self.filename + '.1'))
-        self.assertTrue(os.path.exists(self.filename + '.2'))
+        self.assertTrue(os.path.exists(f'{self.filename}.1'))
+        self.assertTrue(os.path.exists(f'{self.filename}.2'))
 
         handler.emit(record) # 28 bytes
         handler.close()
-        self.assertTrue(os.path.exists(self.filename + '.1'))
-        self.assertTrue(os.path.exists(self.filename + '.2'))
+        self.assertTrue(os.path.exists(f'{self.filename}.1'))
+        self.assertTrue(os.path.exists(f'{self.filename}.2'))
 
         with open(self.filename, 'rb') as f:
             self.assertEqual(f.read(), b'a' * 4)
 
-        with open(self.filename+'.1', 'rb') as f:
+        with open(f'{self.filename}.1', 'rb') as f:
             self.assertEqual(f.read(), b'a' * 12)
 
-        with open(self.filename+'.2', 'rb') as f:
+        with open(f'{self.filename}.2', 'rb') as f:
             self.assertEqual(f.read(), b'a' * 12)
 
     def test_current_logfile_removed(self):
@@ -298,7 +291,7 @@ class RotatingFileHandlerTests(FileHandlerTests):
 
         handler.emit(record) # 4 bytes
         self.assertTrue(os.path.exists(self.filename))
-        self.assertFalse(os.path.exists(self.filename + '.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.1'))
 
         # Someone removes the active log file! :-(
         os.unlink(self.filename)
@@ -307,7 +300,7 @@ class RotatingFileHandlerTests(FileHandlerTests):
         handler.emit(record) # 8 bytes, do rollover
         handler.close()
         self.assertTrue(os.path.exists(self.filename))
-        self.assertFalse(os.path.exists(self.filename + '.1'))
+        self.assertFalse(os.path.exists(f'{self.filename}.1'))
 
     def test_removeAndRename_destination_does_not_exist(self):
         inst = self._makeOne(self.filename)

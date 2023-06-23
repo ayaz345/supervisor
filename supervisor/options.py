@@ -120,19 +120,17 @@ class Options:
 
         self.environ_expansions = {}
         for k, v in os.environ.items():
-            self.environ_expansions['ENV_%s' % k] = v
+            self.environ_expansions[f'ENV_{k}'] = v
 
     def default_configfile(self):
         """Return the name of the found config file or print usage/exit."""
-        config = None
-        for path in self.searchpaths:
-            if os.path.exists(path):
-                config = path
-                break
+        config = next(
+            (path for path in self.searchpaths if os.path.exists(path)), None
+        )
         if config is None and self.require_configfile:
-            self.usage('No config file found at default paths (%s); '
-                       'use the -c option to specify a config file '
-                       'at a different path' % ', '.join(self.searchpaths))
+            self.usage(
+                f"No config file found at default paths ({', '.join(self.searchpaths)}); use the -c option to specify a config file at a different path"
+            )
         return config
 
     def help(self, dummy):
@@ -206,9 +204,9 @@ class Options:
             key, rest = short[:1], short[1:]
             if rest not in ("", ":"):
                 raise ValueError("short option should be 'x' or 'x:'")
-            key = "-" + key
+            key = f"-{key}"
             if key in self.options_map:
-                raise ValueError("duplicate short option key '%s'" % key)
+                raise ValueError(f"duplicate short option key '{key}'")
             self.options_map[key] = (name, handler)
             self.short_options.append(short)
 
@@ -218,9 +216,9 @@ class Options:
             key = long
             if key[-1] == "=":
                 key = key[:-1]
-            key = "--" + key
+            key = f"--{key}"
             if key in self.options_map:
-                raise ValueError("duplicate long option key '%s'" % key)
+                raise ValueError(f"duplicate long option key '{key}'")
             self.options_map[key] = (name, handler)
             self.long_options.append(long)
 
@@ -278,7 +276,7 @@ class Options:
 
         # Check for positional args
         if self.args and not self.positional_args_allowed:
-            self.usage("positional arguments are not supported: %s" % (str(self.args)))
+            self.usage(f"positional arguments are not supported: {str(self.args)}")
 
         # Process options returned by getopt
         for opt, arg in self.options:
@@ -373,18 +371,17 @@ class Options:
             name = section.split(':', 1)[1]
             factory_spec = parser.saneget(section, factory_key, None)
             if factory_spec is None:
-                raise ValueError('section [%s] does not specify a %s'  %
-                                 (section, factory_key))
+                raise ValueError(f'section [{section}] does not specify a {factory_key}')
             try:
                 factory = self.import_spec(factory_spec)
             except (AttributeError, ImportError):
-                raise ValueError('%s cannot be resolved within [%s]' % (
-                    factory_spec, section))
+                raise ValueError(f'{factory_spec} cannot be resolved within [{section}]')
 
-            extras = {}
-            for k in parser.options(section):
-                if k != factory_key:
-                    extras[k] = parser.saneget(section, k)
+            extras = {
+                k: parser.saneget(section, k)
+                for k in parser.options(section)
+                if k != factory_key
+            }
             factories.append((name, factory, extras))
 
         return factories
@@ -394,36 +391,35 @@ class Options:
         return import_spec(spec)
 
     def read_include_config(self, fp, parser, expansions):
-        if parser.has_section('include'):
-            parser.expand_here(self.here)
-            if not parser.has_option('include', 'files'):
-                raise ValueError(".ini file has [include] section, but no "
-                "files setting")
-            files = parser.get('include', 'files')
-            files = expand(files, expansions, 'include.files')
-            files = files.split()
-            if hasattr(fp, 'name'):
-                base = os.path.dirname(os.path.abspath(fp.name))
-            else:
-                base = '.'
-            for pattern in files:
-                pattern = os.path.join(base, pattern)
-                filenames = glob.glob(pattern)
-                if not filenames:
-                    self.parse_warnings.append(
-                        'No file matches via include "%s"' % pattern)
-                    continue
-                for filename in sorted(filenames):
-                    self.parse_infos.append(
-                        'Included extra file "%s" during parsing' % filename)
-                    try:
-                        parser.read(filename)
-                    except ConfigParser.ParsingError as why:
-                        raise ValueError(str(why))
-                    else:
-                        parser.expand_here(
-                            os.path.abspath(os.path.dirname(filename))
-                        )
+        if not parser.has_section('include'):
+            return
+        parser.expand_here(self.here)
+        if not parser.has_option('include', 'files'):
+            raise ValueError(".ini file has [include] section, but no "
+            "files setting")
+        files = parser.get('include', 'files')
+        files = expand(files, expansions, 'include.files')
+        files = files.split()
+        if hasattr(fp, 'name'):
+            base = os.path.dirname(os.path.abspath(fp.name))
+        else:
+            base = '.'
+        for pattern in files:
+            pattern = os.path.join(base, pattern)
+            filenames = glob.glob(pattern)
+            if not filenames:
+                self.parse_warnings.append(f'No file matches via include "{pattern}"')
+                continue
+            for filename in sorted(filenames):
+                self.parse_infos.append(f'Included extra file "{filename}" during parsing')
+                try:
+                    parser.read(filename)
+                except ConfigParser.ParsingError as why:
+                    raise ValueError(str(why))
+                else:
+                    parser.expand_here(
+                        os.path.abspath(os.path.dirname(filename))
+                    )
 
     def _log_parsing_messages(self, logger):
         for msg in self.parse_criticals:
@@ -531,22 +527,14 @@ class ServerOptions(Options):
         if not self.loglevel:
             self.loglevel = section.loglevel
 
-        if self.logfile:
-            logfile = self.logfile
-        else:
-            logfile = section.logfile
-
+        logfile = self.logfile if self.logfile else section.logfile
         if logfile != 'syslog':
             # if the value for logfile is "syslog", we don't want to
             # normalize the path to something like $CWD/syslog.log, but
             # instead use the syslog service.
             self.logfile = normalize_path(logfile)
 
-        if self.pidfile:
-            pidfile = self.pidfile
-        else:
-            pidfile = section.pidfile
-
+        pidfile = self.pidfile if self.pidfile else section.pidfile
         self.pidfile = normalize_path(pidfile)
 
         self.rpcinterface_factories = section.rpcinterface_factories
@@ -561,7 +549,7 @@ class ServerOptions(Options):
         for config in [ config for config in sconfigs if
                         config['family'] is socket.AF_UNIX ]:
             path = config['file']
-            self.serverurl = 'unix://%s' % path
+            self.serverurl = f'unix://{path}'
             break
 
         # fall back to an inet socket
@@ -572,7 +560,7 @@ class ServerOptions(Options):
                 port = config['port']
                 if not host:
                     host = 'localhost'
-                self.serverurl = 'http://%s:%s' % (host, port)
+                self.serverurl = f'http://{host}:{port}'
 
         # self.serverurl may still be None if no servers at all are
         # configured in the config file
@@ -594,12 +582,12 @@ class ServerOptions(Options):
         need_close = False
         if not hasattr(fp, 'read'):
             if not self.exists(fp):
-                raise ValueError("could not find config file %s" % fp)
+                raise ValueError(f"could not find config file {fp}")
             try:
                 fp = self.open(fp, 'r')
                 need_close = True
             except (IOError, OSError):
-                raise ValueError("could not read config file %s" % fp)
+                raise ValueError(f"could not read config file {fp}")
 
         parser = UnhosedConfigParser()
         parser.expansions = self.environ_expansions
@@ -622,7 +610,7 @@ class ServerOptions(Options):
         self.read_include_config(fp, parser, expansions)
 
         sections = parser.sections()
-        if not 'supervisord' in sections:
+        if 'supervisord' not in sections:
             raise ValueError('.ini file does not include supervisord section')
 
         common_expansions = {'here':self.here}
@@ -663,7 +651,7 @@ class ServerOptions(Options):
 
         # extend expansions for global from [supervisord] environment definition
         for k, v in section.environment.items():
-            self.environ_expansions['ENV_%s' % k ] = v
+            self.environ_expansions[f'ENV_{k}'] = v
 
         # Process rpcinterface plugins before groups to allow custom events to
         # be registered.
@@ -703,15 +691,19 @@ class ServerOptions(Options):
             priority = integer(get(section, 'priority', 999))
             group_processes = []
             for program in programs:
-                program_section = "program:%s" % program
-                fcgi_section = "fcgi-program:%s" % program
-                if not program_section in all_sections and not fcgi_section in all_sections:
+                program_section = f"program:{program}"
+                fcgi_section = f"fcgi-program:{program}"
+                if (
+                    program_section not in all_sections
+                    and fcgi_section not in all_sections
+                ):
                     raise ValueError(
-                        '[%s] names unknown program or fcgi-program %s' % (section, program))
+                        f'[{section}] names unknown program or fcgi-program {program}'
+                    )
                 if program_section in all_sections and fcgi_section in all_sections:
-                     raise ValueError(
-                        '[%s] name %s is ambiguous (exists as program and fcgi-program)' %
-                        (section, program))
+                    raise ValueError(
+                        f'[{section}] name {program} is ambiguous (exists as program and fcgi-program)'
+                    )
                 section = program_section if program_section in all_sections else fcgi_section
                 homogeneous_exclude.append(section)
                 processes = self.processes_from_section(parser, section,
@@ -755,23 +747,20 @@ class ServerOptions(Options):
             try:
                 result_handler = self.import_spec(result_handler)
             except (AttributeError, ImportError):
-                raise ValueError('%s cannot be resolved within [%s]' % (
-                    result_handler, section))
+                raise ValueError(f'{result_handler} cannot be resolved within [{section}]')
 
             pool_event_names = [x.upper() for x in
                                 list_of_strings(get(section, 'events', ''))]
             pool_event_names = set(pool_event_names)
             if not pool_event_names:
-                raise ValueError('[%s] section requires an "events" line' %
-                                 section)
+                raise ValueError(f'[{section}] section requires an "events" line')
 
             from supervisor.events import EventTypes
             pool_events = []
             for pool_event_name in pool_event_names:
                 pool_event = getattr(EventTypes, pool_event_name, None)
                 if pool_event is None:
-                    raise ValueError('Unknown event type %s in [%s] events' %
-                                     (pool_event_name, section))
+                    raise ValueError(f'Unknown event type {pool_event_name} in [{section}] events')
                 pool_events.append(pool_event)
 
             redirect_stderr = boolean(get(section, 'redirect_stderr', 'false'))
@@ -800,46 +789,38 @@ class ServerOptions(Options):
 
             # find proc_uid from "user" option
             proc_user = get(section, 'user', None)
-            if proc_user is None:
-                proc_uid = None
-            else:
-                proc_uid = name_to_uid(proc_user)
-
+            proc_uid = None if proc_user is None else name_to_uid(proc_user)
             socket_backlog = get(section, 'socket_backlog', None)
 
             if socket_backlog is not None:
                 socket_backlog = integer(socket_backlog)
                 if (socket_backlog < 1 or socket_backlog > 65535):
-                    raise ValueError('Invalid socket_backlog value %s'
-                                                            % socket_backlog)
+                    raise ValueError(f'Invalid socket_backlog value {socket_backlog}')
 
             socket_owner = get(section, 'socket_owner', None)
             if socket_owner is not None:
                 try:
                     socket_owner = colon_separated_user_group(socket_owner)
                 except ValueError:
-                    raise ValueError('Invalid socket_owner value %s'
-                                                                % socket_owner)
+                    raise ValueError(f'Invalid socket_owner value {socket_owner}')
 
             socket_mode = get(section, 'socket_mode', None)
             if socket_mode is not None:
                 try:
                     socket_mode = octal_type(socket_mode)
                 except (TypeError, ValueError):
-                    raise ValueError('Invalid socket_mode value %s'
-                                                                % socket_mode)
+                    raise ValueError(f'Invalid socket_mode value {socket_mode}')
 
             socket = get(section, 'socket', None, expansions=fcgi_expansions)
             if not socket:
-                raise ValueError('[%s] section requires a "socket" line' %
-                                 section)
+                raise ValueError(f'[{section}] section requires a "socket" line')
 
             try:
                 socket_config = self.parse_fcgi_socket(socket, proc_uid,
                                                     socket_owner, socket_mode,
                                                     socket_backlog)
             except ValueError as e:
-                raise ValueError('%s in [%s] socket' % (str(e), section))
+                raise ValueError(f'{str(e)} in [{section}] socket')
 
             processes=self.processes_from_section(parser, section, program_name,
                                                   FastCGIProcessConfig)
@@ -877,10 +858,9 @@ class ServerOptions(Options):
             raise ValueError("socket_owner and socket_mode params should"
                     + " only be used with a Unix domain socket")
 
-        m = re.match(r'tcp://([^\s:]+):(\d+)$', sock)
-        if m:
-            host = m.group(1)
-            port = int(m.group(2))
+        if m := re.match(r'tcp://([^\s:]+):(\d+)$', sock):
+            host = m[1]
+            port = int(m[2])
             return InetStreamSocketConfig(host, port,
                     backlog=socket_backlog)
 
@@ -939,11 +919,7 @@ class ServerOptions(Options):
 
         # find uid from "user" option
         user = get(section, 'user', None)
-        if user is None:
-            uid = None
-        else:
-            uid = name_to_uid(user)
-
+        uid = None if user is None else name_to_uid(user)
         umask = get(section, 'umask', None)
         if umask is not None:
             umask = octal_type(umask)
@@ -952,7 +928,7 @@ class ServerOptions(Options):
             get(section, 'process_name', '%(program_name)s', do_expand=False))
 
         if numprocs > 1:
-            if not '%(process_num)' in process_name:
+            if '%(process_num)' not in process_name:
                 # process_name needs to include process_num when we
                 # represent a group of processes
                 raise ValueError(
@@ -974,29 +950,29 @@ class ServerOptions(Options):
 
             # extend expansions for process from [program:x] environment definition
             for k, v in environment.items():
-                expansions['ENV_%s' % k] = v
+                expansions[f'ENV_{k}'] = v
 
             directory = get(section, 'directory', None)
 
             logfiles = {}
 
             for k in ('stdout', 'stderr'):
-                lf_key = '%s_logfile' % k
+                lf_key = f'{k}_logfile'
                 lf_val = get(section, lf_key, Automatic)
                 if isinstance(lf_val, basestring):
                     lf_val = expand(lf_val, expansions, lf_key)
                 lf_val = logfile_name(lf_val)
                 logfiles[lf_key] = lf_val
 
-                bu_key = '%s_logfile_backups' % k
+                bu_key = f'{k}_logfile_backups'
                 backups = integer(get(section, bu_key, 10))
                 logfiles[bu_key] = backups
 
-                mb_key = '%s_logfile_maxbytes' % k
+                mb_key = f'{k}_logfile_maxbytes'
                 maxbytes = byte_size(get(section, mb_key, '50MB'))
                 logfiles[mb_key] = maxbytes
 
-                sy_key = '%s_syslog' % k
+                sy_key = f'{k}_syslog'
                 syslog = boolean(get(section, sy_key, False))
                 logfiles[sy_key] = syslog
 
@@ -1027,8 +1003,7 @@ class ServerOptions(Options):
 
             command = get(section, 'command', None, expansions=expansions)
             if command is None:
-                raise ValueError(
-                    'program section %s does not specify a command' % section)
+                raise ValueError(f'program section {section} does not specify a command')
 
             pconfig = klass(
                 self,
@@ -1073,10 +1048,7 @@ class ServerOptions(Options):
         for section in parser.sections():
             if section.startswith(stype):
                 parts = section.split(':', 1)
-                if len(parts) > 1:
-                    name = parts[1]
-                else:
-                    name = None # default sentinel
+                name = parts[1] if len(parts) > 1 else None
                 options.append((name, section))
         return options
 
@@ -1098,12 +1070,12 @@ class ServerOptions(Options):
         for name, section in inet_serverdefs:
             config = {}
             get = parser.saneget
-            config.update(self._parse_username_and_password(parser, section))
+            config |= self._parse_username_and_password(parser, section)
             config['name'] = name
             config['family'] = socket.AF_INET
             port = get(section, 'port', None)
             if port is None:
-                raise ValueError('section [%s] has no port value' % section)
+                raise ValueError(f'section [{section}] has no port value')
             host, port = inet_address(port)
             config['host'] = host
             config['port'] = port
@@ -1116,18 +1088,18 @@ class ServerOptions(Options):
             get = parser.saneget
             sfile = get(section, 'file', None, expansions={'here': self.here})
             if sfile is None:
-                raise ValueError('section [%s] has no file value' % section)
+                raise ValueError(f'section [{section}] has no file value')
             sfile = sfile.strip()
             config['name'] = name
             config['family'] = socket.AF_UNIX
             config['file'] = normalize_path(sfile)
-            config.update(self._parse_username_and_password(parser, section))
+            config |= self._parse_username_and_password(parser, section)
             chown = get(section, 'chown', None)
             if chown is not None:
                 try:
                     chown = colon_separated_user_group(chown)
                 except ValueError:
-                    raise ValueError('Invalid sockchown value %s' % chown)
+                    raise ValueError(f'Invalid sockchown value {chown}')
             else:
                 chown = (-1, -1)
             config['chown'] = chown
@@ -1136,7 +1108,7 @@ class ServerOptions(Options):
                 try:
                     chmod = octal_type(chmod)
                 except (TypeError, ValueError):
-                    raise ValueError('Invalid chmod value %s' % chmod)
+                    raise ValueError(f'Invalid chmod value {chmod}')
             else:
                 chmod = 0o700
             config['chmod'] = chmod
@@ -1208,10 +1180,10 @@ class ServerOptions(Options):
             with open(self.pidfile, 'w') as f:
                 f.write('%s\n' % pid)
         except (IOError, OSError):
-            self.logger.critical('could not write pidfile %s' % self.pidfile)
+            self.logger.critical(f'could not write pidfile {self.pidfile}')
         else:
             self.unlink_pidfile = True
-            self.logger.info('supervisord started with pid %s' % pid)
+            self.logger.info(f'supervisord started with pid {pid}')
 
     def cleanup(self):
         for config, server in self.httpservers:
@@ -1281,7 +1253,7 @@ class ServerOptions(Options):
                 help = 'Cannot open an HTTP server: socket.error reported'
                 errorname = errno.errorcode.get(why.args[0])
                 if errorname is None:
-                    self.usage('%s %s' % (help, why.args[0]))
+                    self.usage(f'{help} {why.args[0]}')
                 else:
                     self.usage('%s errno.%s (%d)' %
                                (help, errorname, why.args[0]))
@@ -1289,12 +1261,8 @@ class ServerOptions(Options):
             self.usage(why.args[0])
 
     def get_autochildlog_name(self, name, identifier, channel):
-        prefix='%s-%s---%s-' % (name, channel, identifier)
-        logfile = self.mktempfile(
-            suffix='.log',
-            prefix=prefix,
-            dir=self.childlogdir)
-        return logfile
+        prefix = f'{name}-{channel}---{identifier}-'
+        return self.mktempfile(suffix='.log', prefix=prefix, dir=self.childlogdir)
 
     def clear_autochildlogdir(self):
         # must be called after realize()
@@ -1420,8 +1388,7 @@ class ServerOptions(Options):
         else:
             msg = self.drop_privileges(self.uid)
             if msg is None:
-                self.parse_infos.append('Set uid to user %s succeeded' %
-                                        self.uid)
+                self.parse_infos.append(f'Set uid to user {self.uid} succeeded')
             else:  # failed to drop privileges
                 self.usage(msg)
 
@@ -1551,8 +1518,7 @@ class ServerOptions(Options):
         """Return a list corresponding to $PATH, or a default."""
         path = ["/bin", "/usr/bin", "/usr/local/bin"]
         if "PATH" in os.environ:
-            p = os.environ["PATH"]
-            if p:
+            if p := os.environ["PATH"]:
                 path = p.split(os.pathsep)
         return path
 

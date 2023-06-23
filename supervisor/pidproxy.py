@@ -59,7 +59,7 @@ class PidProxy:
             with open(self.pidfile, 'r') as f:
                 pid = int(f.read().strip())
         except:
-            print("Can't read child pidfile %s!" % self.pidfile)
+            print(f"Can't read child pidfile {self.pidfile}!")
             return
         os.kill(pid, sig)
         if sig in [signal.SIGTERM, signal.SIGINT, signal.SIGQUIT]:

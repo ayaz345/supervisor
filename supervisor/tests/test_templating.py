@@ -736,7 +736,7 @@ class MeldElementInterfaceTests(unittest.TestCase):
         child2 = self._makeOne('child2', {})
         child3 = self._makeOne('child3', {})
         children = (child1, child2, child3)
-        parent[0:2] = children
+        parent[:2] = children
         self.assertEqual(child1.parent, parent)
         self.assertEqual(child2.parent, parent)
         self.assertEqual(child3.parent, parent)
@@ -748,8 +748,8 @@ class MeldElementInterfaceTests(unittest.TestCase):
         child2 = self._makeOne('child2', {})
         child3 = self._makeOne('child3', {})
         children = (child1, child2, child3)
-        parent[0:2] = children
-        del parent[0:2]
+        parent[:2] = children
+        del parent[:2]
         self.assertEqual(child1.parent, None)
         self.assertEqual(child2.parent, None)
         self.assertEqual(child3.parent, parent)
@@ -1101,13 +1101,11 @@ class MeldElementInterfaceTests(unittest.TestCase):
 class ParserTests(unittest.TestCase):
     def _parse(self, *args):
         from supervisor.templating import parse_xmlstring
-        root = parse_xmlstring(*args)
-        return root
+        return parse_xmlstring(*args)
 
     def _parse_html(self, *args):
         from supervisor.templating import parse_htmlstring
-        root = parse_htmlstring(*args)
-        return root
+        return parse_htmlstring(*args)
 
     def test_parse_simple_xml(self):
         from supervisor.templating import _MELD_ID
@@ -1311,13 +1309,11 @@ class UtilTests(unittest.TestCase):
 class WriterTests(unittest.TestCase):
     def _parse(self, xml):
         from supervisor.templating import parse_xmlstring
-        root = parse_xmlstring(xml)
-        return root
+        return parse_xmlstring(xml)
 
     def _parse_html(self, xml):
         from supervisor.templating import parse_htmlstring
-        root = parse_htmlstring(xml)
-        return root
+        return parse_htmlstring(xml)
 
     def _write(self, fn, **kw):
         try:
@@ -1327,8 +1323,7 @@ class WriterTests(unittest.TestCase):
         out = BytesIO()
         fn(out, **kw)
         out.seek(0)
-        actual = out.read()
-        return actual
+        return out.read()
 
     def _write_xml(self, node, **kw):
         return self._write(node.write_xml, **kw)

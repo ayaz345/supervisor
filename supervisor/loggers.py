@@ -37,17 +37,16 @@ class LevelsByDescription:
     blather = LevelsByName.BLAT
 
 def _levelNumbers():
-    bynumber = {}
-    for name, number in LevelsByName.__dict__.items():
-        if not name.startswith('_'):
-            bynumber[number] = name
-    return bynumber
+    return {
+        number: name
+        for name, number in LevelsByName.__dict__.items()
+        if not name.startswith('_')
+    }
 
 LOG_LEVELS_BY_NUM = _levelNumbers()
 
 def getLevelNumByDescription(description):
-    num = getattr(LevelsByDescription, description, None)
-    return num
+    return getattr(LevelsByDescription, description, None)
 
 class Handler:
     fmt = '%(message)s'
@@ -91,11 +90,11 @@ class Handler:
             binary = (self.fmt == '%(message)s' and
                       isinstance(record.msg, bytes) and
                       (not record.kw or record.kw == {'exc_info': None}))
-            binary_stream = not is_text_stream(self.stream)
             if binary:
                 msg = record.msg
             else:
                 msg = self.fmt % record.asdict()
+                binary_stream = not is_text_stream(self.stream)
                 if binary_stream:
                     msg = msg.encode('utf-8')
             try:
@@ -159,16 +158,15 @@ class FileHandler(Handler):
         try:
             self.stream = open(filename, mode)
         except OSError as e:
-            if mode == 'ab' and e.errno == errno.ESPIPE:
-                # Python 3 can't open special files like
-                # /dev/stdout in 'a' mode due to an implicit seek call
-                # that fails with ESPIPE. Retry in 'w' mode.
-                # See: http://bugs.python.org/issue27805
-                mode = 'wb'
-                self.stream = open(filename, mode)
-            else:
+            if mode != 'ab' or e.errno != errno.ESPIPE:
                 raise
 
+            # Python 3 can't open special files like
+            # /dev/stdout in 'a' mode due to an implicit seek call
+            # that fails with ESPIPE. Retry in 'w' mode.
+            # See: http://bugs.python.org/issue27805
+            mode = 'wb'
+            self.stream = open(filename, mode)
         self.baseFilename = filename
         self.mode = mode
 
@@ -271,7 +269,7 @@ class RotatingFileHandler(FileHandler):
                 dfn = "%s.%d" % (self.baseFilename, i + 1)
                 if os.path.exists(sfn):
                     self.removeAndRename(sfn, dfn)
-            dfn = self.baseFilename + ".1"
+            dfn = f"{self.baseFilename}.1"
             self.removeAndRename(self.baseFilename, dfn)
         self.stream = open(self.baseFilename, 'wb')
 
@@ -412,11 +410,10 @@ def handle_file(logger, filename, fmt, rotating=False, maxbytes=0, backups=0):
     is the magic name of 'syslog' then make it a syslog handler instead."""
     if filename == 'syslog': # TODO remove this
         handler = SyslogHandler()
+    elif rotating is False:
+        handler = FileHandler(filename)
     else:
-        if rotating is False:
-            handler = FileHandler(filename)
-        else:
-            handler = RotatingFileHandler(filename, 'a', maxbytes, backups)
+        handler = RotatingFileHandler(filename, 'a', maxbytes, backups)
     handler.setFormat(fmt)
     handler.setLevel(logger.level)
     logger.addHandler(handler)

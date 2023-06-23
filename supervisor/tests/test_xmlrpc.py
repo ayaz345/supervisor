@@ -396,9 +396,13 @@ class TraverseTests(unittest.TestCase):
         from supervisor import xmlrpc
         class Root:
             pass
+
+
         class A:
             def hello(self, name):
-                return "Hello %s" % name
+                return f"Hello {name}"
+
+
         root = Root()
         root.a = A()
         self.assertRaises(xmlrpc.RPCError, xmlrpc.traverse,
@@ -408,9 +412,13 @@ class TraverseTests(unittest.TestCase):
         from supervisor import xmlrpc
         class Root:
             pass
+
+
         class A:
             def hello(self, name):
-                return "Hello %s" % name
+                return f"Hello {name}"
+
+
         root = Root()
         root.a = A()
         result = xmlrpc.traverse(root, 'a.hello', ["there"])
@@ -774,8 +782,7 @@ class TestSystemNamespaceRPCInterface(unittest.TestCase):
 
         bad_name = {'faultCode': Faults.BAD_NAME,
                     'faultString': 'BAD_NAME: foo'}
-        os_error = {'faultCode': Faults.FAILED,
-                    'faultString': "FAILED: %s:2" % OSError}
+        os_error = {'faultCode': Faults.FAILED, 'faultString': f"FAILED: {OSError}:2"}
         self.assertEqual(results, [bad_name, os_error])
 
     def test_multicall_catches_callback_exceptions(self):
@@ -801,8 +808,7 @@ class TestSystemNamespaceRPCInterface(unittest.TestCase):
 
         bad_name = {'faultCode': Faults.BAD_NAME,
                     'faultString': 'BAD_NAME: foo'}
-        os_error = {'faultCode': Faults.FAILED,
-                    'faultString': "FAILED: %s:2" % OSError}
+        os_error = {'faultCode': Faults.FAILED, 'faultString': f"FAILED: {OSError}:2"}
         self.assertEqual(results, [bad_name, os_error])
 
     def test_multicall_performs_callback_functions_serially(self):

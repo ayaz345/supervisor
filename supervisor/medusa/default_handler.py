@@ -74,7 +74,7 @@ class default_handler:
 
     # handle a file request, with caching.
 
-    def handle_request (self, request):
+    def handle_request(self, request):
 
         if request.command not in self.valid_commands:
             request.error (400) # bad request
@@ -93,10 +93,7 @@ class default_handler:
 
         if self.filesystem.isdir (path):
             if path and path[-1] != '/':
-                request['Location'] = 'http://%s/%s/' % (
-                        request.channel.server.server_name,
-                        path
-                        )
+                request['Location'] = f'http://{request.channel.server.server_name}/{path}/'
                 request.error (301)
                 return
 
@@ -104,8 +101,6 @@ class default_handler:
             # may want to move this into another method for that
             # purpose
             found = 0
-            if path and path[-1] != '/':
-                path += '/'
             for default in self.directory_defaults:
                 p = path + default
                 if self.filesystem.isfile (p):
@@ -126,8 +121,7 @@ class default_handler:
 
         length_match = 1
         if ims:
-            length = ims.group (4)
-            if length:
+            if length := ims.group(4):
                 try:
                     length = int(length)
                     if length != file_length:
@@ -135,11 +129,7 @@ class default_handler:
                 except:
                     pass
 
-        ims_date = 0
-
-        if ims:
-            ims_date = http_date.parse_http_date (ims.group (1))
-
+        ims_date = http_date.parse_http_date (ims.group (1)) if ims else 0
         try:
             mtime = self.filesystem.stat (path)[stat.ST_MTIME]
         except:
@@ -168,24 +158,26 @@ class default_handler:
         self.file_counter.increment()
         request.done()
 
-    def set_content_type (self, path, request):
+    def set_content_type(self, path, request):
         typ, encoding = mimetypes.guess_type(path)
-        if typ is not None:
-            request['Content-Type'] = typ
-        else:
-            # TODO: test a chunk off the front of the file for 8-bit
-            # characters, and use application/octet-stream instead.
-            request['Content-Type'] = 'text/plain'
+        request['Content-Type'] = typ if typ is not None else 'text/plain'
 
-    def status (self):
-        return producers.simple_producer (
-                '<li>%s' % html_repr (self)
-                + '<ul>'
-                + '  <li><b>Total Hits:</b> %s'                 % self.hit_counter
-                + '  <li><b>Files Delivered:</b> %s'    % self.file_counter
-                + '  <li><b>Cache Hits:</b> %s'                 % self.cache_counter
-                + '</ul>'
+    def status(self):
+        return producers.simple_producer(
+            (
+                (
+                    (
+                        (
+                            f'<li>{html_repr(self)}<ul>'
+                            + f'  <li><b>Total Hits:</b> {self.hit_counter}'
+                        )
+                        + f'  <li><b>Files Delivered:</b> {self.file_counter}'
+                    )
+                    + f'  <li><b>Cache Hits:</b> {self.cache_counter}'
                 )
+                + '</ul>'
+            )
+        )
 
 # HTTP/1.0 doesn't say anything about the "; length=nnnn" addition
 # to this header.  I suppose its purpose is to avoid the overhead
@@ -205,10 +197,7 @@ CONTENT_TYPE = re.compile (
 get_header = http_server.get_header
 get_header_match = http_server.get_header_match
 
-def get_extension (path):
+def get_extension(path):
     dirsep = path.rfind('/')
     dotsep = path.rfind('.')
-    if dotsep > dirsep:
-        return path[dotsep+1:]
-    else:
-        return ''
+    return path[dotsep+1:] if dotsep > dirsep else ''

@@ -33,8 +33,7 @@ def get_asctime(now=None):
         now = time.time() # pragma: no cover
     msecs = (now - long(now)) * 1000
     part1 = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
-    asctime = '%s,%03d' % (part1, msecs)
-    return asctime
+    return '%s,%03d' % (part1, msecs)
 
 class ProcessCommunicationsProtocol:
     def send(self, msg, fp=sys.stdout):

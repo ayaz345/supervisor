@@ -60,9 +60,7 @@ class SocketManager:
             )
 
     def __repr__(self):
-        return '<%s at %s for %s>' % (self.__class__,
-                                      id(self),
-                                      self.socket_config.url)
+        return f'<{self.__class__} at {id(self)} for {self.socket_config.url}>'
 
     def config(self):
         return self.socket_config
@@ -86,7 +84,7 @@ class SocketManager:
     def _prepare_socket(self):
         if not self.prepared:
             if self.logger:
-                self.logger.info('Creating socket %s' % self.socket_config)
+                self.logger.info(f'Creating socket {self.socket_config}')
             self.socket = self.socket_config.create_and_bind()
             if self.socket_config.get_backlog():
                 self.socket.listen(self.socket_config.get_backlog())
@@ -97,6 +95,6 @@ class SocketManager:
     def _close(self):
         self._require_prepared()
         if self.logger:
-            self.logger.info('Closing socket %s' % self.socket_config)
+            self.logger.info(f'Closing socket {self.socket_config}')
         self.socket.close()
         self.prepared = False

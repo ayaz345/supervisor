@@ -43,11 +43,8 @@ class auth_handler:
         # by default, use the given handler's matcher
         return self.handler.match (request)
 
-    def handle_request (self, request):
-        # authorize a request before handling it...
-        scheme = get_header (AUTHORIZATION, request.header)
-
-        if scheme:
+    def handle_request(self, request):
+        if scheme := get_header(AUTHORIZATION, request.header):
             scheme = scheme.lower()
             if scheme == 'basic':
                 cookie = get_header (AUTHORIZATION, request.header, 2)
@@ -79,22 +76,21 @@ class auth_handler:
             #print 'sending header: %s' % request['WWW-Authenticate']
             self.handle_unauthorized (request)
 
-    def handle_unauthorized (self, request):
+    def handle_unauthorized(self, request):
         # We are now going to receive data that we want to ignore.
         # to ignore the file data we're not interested in.
         self.fail_count.increment()
         request.channel.set_terminator (None)
         request['Connection'] = 'close'
-        request['WWW-Authenticate'] = 'Basic realm="%s"' % self.realm
+        request['WWW-Authenticate'] = f'Basic realm="{self.realm}"'
         request.error (401)
 
-    def make_nonce (self, request):
+    def make_nonce(self, request):
         """A digest-authentication <nonce>, constructed as suggested in RFC 2069"""
         ip = request.channel.server.ip
         now = str(long(time.time()))
-        if now[-1:] == 'L':
-            now = now[:-1]
-        private_key = str (id (self))
+        now = now.removesuffix('L')
+        private_key = id(self)
         nonce = ':'.join([ip, now, private_key])
         return self.apply_hash (nonce)
 
@@ -125,12 +121,9 @@ class dictionary_authorizer:
     def __init__ (self, dict):
         self.dict = dict
 
-    def authorize (self, auth_info):
+    def authorize(self, auth_info):
         [username, password] = auth_info
-        if username in self.dict and self.dict[username] == password:
-            return 1
-        else:
-            return 0
+        return 1 if username in self.dict and self.dict[username] == password else 0
 
 AUTHORIZATION = re.compile (
         #               scheme  challenge
