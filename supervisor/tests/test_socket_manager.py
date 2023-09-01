@@ -101,8 +101,7 @@ class SocketManagerTest(unittest.TestCase):
     def test_repr(self):
         conf = DummySocketConfig(2)
         sock_manager = self._makeOne(conf)
-        expected = "<%s at %s for %s>" % (
-            sock_manager.__class__, id(sock_manager), conf.url)
+        expected = f"<{sock_manager.__class__} at {id(sock_manager)} for {conf.url}>"
         self.assertEqual(repr(sock_manager), expected)
 
     def test_get_config(self):
@@ -181,11 +180,11 @@ class SocketManagerTest(unittest.TestCase):
         # socket open
         sock = sock_manager.get_socket()
         self.assertEqual(len(logger.data), 1)
-        self.assertEqual('Creating socket %s' % repr(conf), logger.data[0])
+        self.assertEqual(f'Creating socket {repr(conf)}', logger.data[0])
         # socket close
         del sock
         self.assertEqual(len(logger.data), 2)
-        self.assertEqual('Closing socket %s' % repr(conf), logger.data[1])
+        self.assertEqual(f'Closing socket {repr(conf)}', logger.data[1])
 
     def test_prepare_socket(self):
         conf = DummySocketConfig(1)

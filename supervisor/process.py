@@ -110,7 +110,7 @@ class Subprocess(object):
             commandargs = shlex.split(self.config.command)
         except ValueError as e:
             raise BadCommand("can't parse command %r: %s" % \
-                (self.config.command, str(e)))
+                    (self.config.command, str(e)))
 
         if commandargs:
             program = commandargs[0]
@@ -136,11 +136,7 @@ class Subprocess(object):
                     pass
                 else:
                     break
-            if st is None:
-                filename = program
-            else:
-                filename = found
-
+            filename = program if st is None else found
         # check_execv_args will raise a ProcessException if the execv
         # args are bogus, we break it out into a separate options
         # method call here only to service unit tests
@@ -181,12 +177,13 @@ class Subprocess(object):
             current_state = getProcessStateDescription(self.state)
             allowable_states = ' '.join(map(getProcessStateDescription, states))
             processname = as_string(self.config.name)
-            raise AssertionError('Assertion failed for %s: %s not in %s' %  (
-                processname, current_state, allowable_states))
+            raise AssertionError(
+                f'Assertion failed for {processname}: {current_state} not in {allowable_states}'
+            )
 
     def record_spawnerr(self, msg):
         self.spawnerr = msg
-        self.config.options.logger.info("spawnerr: %s" % msg)
+        self.config.options.logger.info(f"spawnerr: {msg}")
 
     def spawn(self):
         """Start the subprocess.  It must not be running already.
@@ -297,14 +294,10 @@ class Subprocess(object):
             options.setpgrp()
 
             self._prepare_child_fds()
-            # sending to fd 2 will put this output in the stderr log
-
-            # set user
-            setuid_msg = self.set_uid()
-            if setuid_msg:
+            if setuid_msg := self.set_uid():
                 uid = self.config.uid
                 msg = "couldn't setuid to %s: %s\n" % (uid, setuid_msg)
-                options.write(2, "supervisor: " + msg)
+                options.write(2, f"supervisor: {msg}")
                 return # finally clause will exit the child process
 
             # set environment
@@ -319,7 +312,7 @@ class Subprocess(object):
             if self.group:
                 env['SUPERVISOR_GROUP_NAME'] = self.group.config.name
             if self.config.environment is not None:
-                env.update(self.config.environment)
+                env |= self.config.environment
 
             # change directory
             cwd = self.config.directory
@@ -329,7 +322,7 @@ class Subprocess(object):
             except OSError as why:
                 code = errno.errorcode.get(why.args[0], why.args[0])
                 msg = "couldn't chdir to %s: %s\n" % (cwd, code)
-                options.write(2, "supervisor: " + msg)
+                options.write(2, f"supervisor: {msg}")
                 return # finally clause will exit the child process
 
             # set umask, then execve
@@ -340,15 +333,15 @@ class Subprocess(object):
             except OSError as why:
                 code = errno.errorcode.get(why.args[0], why.args[0])
                 msg = "couldn't exec %s: %s\n" % (argv[0], code)
-                options.write(2, "supervisor: " + msg)
+                options.write(2, f"supervisor: {msg}")
             except:
                 (file, fun, line), t,v,tbinfo = asyncore.compact_traceback()
-                error = '%s, %s: file: %s line: %s' % (t, v, file, line)
+                error = f'{t}, {v}: file: {file} line: {line}'
                 msg = "couldn't exec %s: %s\n" % (filename, error)
-                options.write(2, "supervisor: " + msg)
+                options.write(2, f"supervisor: {msg}")
 
-            # this point should only be reached if execve failed.
-            # the finally clause will exit the child process.
+                # this point should only be reached if execve failed.
+                # the finally clause will exit the child process.
 
         finally:
             options.write(2, "supervisor: child process was not spawned\n")
@@ -391,7 +384,8 @@ class Subprocess(object):
 
             if now > (self.laststopreport + 2): # every 2 seconds
                 self.config.options.logger.info(
-                    'waiting for %s to stop' % as_string(self.config.name))
+                    f'waiting for {as_string(self.config.name)} to stop'
+                )
                 self.laststopreport = now
 
     def give_up(self):
@@ -417,35 +411,25 @@ class Subprocess(object):
         # large number and the process isn't starting successfully, the stop
         # request would be blocked for a long time waiting for the retries.
         if self.state == ProcessStates.BACKOFF:
-            msg = ("Attempted to kill %s, which is in BACKOFF state." %
-                   processname)
+            msg = f"Attempted to kill {processname}, which is in BACKOFF state."
             options.logger.debug(msg)
             self.change_state(ProcessStates.STOPPED)
             return None
 
         if not self.pid:
-            msg = ("attempted to kill %s with sig %s but it wasn't running" %
-                   (processname, signame(sig)))
+            msg = f"attempted to kill {processname} with sig {signame(sig)} but it wasn't running"
             options.logger.debug(msg)
             return msg
 
-        # If we're in the stopping state, then we've already sent the stop
-        # signal and this is the kill signal
-        if self.state == ProcessStates.STOPPING:
-            killasgroup = self.config.killasgroup
-        else:
-            killasgroup = self.config.stopasgroup
-
-        as_group = ""
-        if killasgroup:
-            as_group = "process group "
-
-        options.logger.debug('killing %s (pid %s) %swith signal %s'
-                             % (processname,
-                                self.pid,
-                                as_group,
-                                signame(sig))
-                             )
+        killasgroup = (
+            self.config.killasgroup
+            if self.state == ProcessStates.STOPPING
+            else self.config.stopasgroup
+        )
+        as_group = "process group " if killasgroup else ""
+        options.logger.debug(
+            f'killing {processname} (pid {self.pid}) {as_group}with signal {signame(sig)}'
+        )
 
         # RUNNING/STARTING/STOPPING -> STOPPING
         self.killing = True
@@ -467,8 +451,7 @@ class Subprocess(object):
                 options.kill(pid, sig)
             except OSError as exc:
                 if exc.errno == errno.ESRCH:
-                    msg = ("unable to signal %s (pid %s), it probably just exited "
-                           "on its own: %s" % (processname, self.pid, str(exc)))
+                    msg = f"unable to signal {processname} (pid {self.pid}), it probably just exited on its own: {str(exc)}"
                     options.logger.debug(msg)
                     # we could change the state here but we intentionally do
                     # not.  we will do it during normal SIGCHLD processing.
@@ -476,8 +459,7 @@ class Subprocess(object):
                 raise
         except:
             tb = traceback.format_exc()
-            msg = 'unknown problem killing %s (%s):%s' % (processname,
-                                                          self.pid, tb)
+            msg = f'unknown problem killing {processname} ({self.pid}):{tb}'
             options.logger.critical(msg)
             self.change_state(ProcessStates.UNKNOWN)
             self.killing = False
@@ -495,16 +477,13 @@ class Subprocess(object):
         options = self.config.options
         processname = as_string(self.config.name)
         if not self.pid:
-            msg = ("attempted to send %s sig %s but it wasn't running" %
-                   (processname, signame(sig)))
+            msg = f"attempted to send {processname} sig {signame(sig)} but it wasn't running"
             options.logger.debug(msg)
             return msg
 
-        options.logger.debug('sending %s (pid %s) sig %s'
-                             % (processname,
-                                self.pid,
-                                signame(sig))
-                             )
+        options.logger.debug(
+            f'sending {processname} (pid {self.pid}) sig {signame(sig)}'
+        )
 
         self._assertInState(ProcessStates.RUNNING,
                             ProcessStates.STARTING,
@@ -525,8 +504,7 @@ class Subprocess(object):
                 raise
         except:
             tb = traceback.format_exc()
-            msg = 'unknown problem sending sig %s (%s):%s' % (
-                                processname, self.pid, tb)
+            msg = f'unknown problem sending sig {processname} ({self.pid}):{tb}'
             options.logger.critical(msg)
             self.change_state(ProcessStates.UNKNOWN)
             return msg
@@ -565,7 +543,7 @@ class Subprocess(object):
             self.delay = 0
             self.exitstatus = es
 
-            msg = "stopped: %s (%s)" % (processname, msg)
+            msg = f"stopped: {processname} ({msg})"
             self._assertInState(ProcessStates.STOPPING)
             self.change_state(ProcessStates.STOPPED)
             if exit_expected:
@@ -579,7 +557,7 @@ class Subprocess(object):
             # implies STARTING -> BACKOFF
             self.exitstatus = None
             self.spawnerr = 'Exited too quickly (process log may have details)'
-            msg = "exited: %s (%s)" % (processname, msg + "; not expected")
+            msg = f"exited: {processname} ({msg}; not expected)"
             self._assertInState(ProcessStates.STARTING)
             self.change_state(ProcessStates.BACKOFF)
             self.config.options.logger.warn(msg)
@@ -602,13 +580,13 @@ class Subprocess(object):
 
             if exit_expected:
                 # expected exit code
-                msg = "exited: %s (%s)" % (processname, msg + "; expected")
+                msg = f"exited: {processname} ({msg}; expected)"
                 self.change_state(ProcessStates.EXITED, expected=True)
                 self.config.options.logger.info(msg)
             else:
                 # unexpected exit code
-                self.spawnerr = 'Bad exit code %s' % es
-                msg = "exited: %s (%s)" % (processname, msg + "; not expected")
+                self.spawnerr = f'Bad exit code {es}'
+                msg = f"exited: {processname} ({msg}; not expected)"
                 self.change_state(ProcessStates.EXITED, expected=False)
                 self.config.options.logger.warn(msg)
 
@@ -629,8 +607,7 @@ class Subprocess(object):
     def set_uid(self):
         if self.config.uid is None:
             return
-        msg = self.config.options.drop_privileges(self.config.uid)
-        return msg
+        return self.config.options.drop_privileges(self.config.uid)
 
     def __lt__(self, other):
         return self.config.priority < other.config.priority
@@ -645,10 +622,7 @@ class Subprocess(object):
         name = self.config.name
         if PY2:
             name = as_string(name).encode('unicode-escape')
-        return '<Subprocess at %s with name %s in state %s>' % (
-            id(self),
-            name,
-            getProcessStateDescription(self.get_state()))
+        return f'<Subprocess at {id(self)} with name {name} in state {getProcessStateDescription(self.get_state())}>'
 
     def get_state(self):
         return self.state

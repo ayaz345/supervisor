@@ -44,17 +44,21 @@ class Faults:
     CANT_REREAD = 92
 
 def getFaultDescription(code):
-    for faultname in Faults.__dict__:
-        if getattr(Faults, faultname) == code:
-            return faultname
-    return 'UNKNOWN'
+    return next(
+        (
+            faultname
+            for faultname in Faults.__dict__
+            if getattr(Faults, faultname) == code
+        ),
+        'UNKNOWN',
+    )
 
 class RPCError(Exception):
     def __init__(self, code, extra=None):
         self.code = code
         self.text = getFaultDescription(code)
         if extra is not None:
-            self.text = '%s: %s' % (self.text, extra)
+            self.text = f'{self.text}: {extra}'
 
     def __str__(self):
         return 'code=%r, text=%r' % (self.code, self.text)
@@ -103,17 +107,16 @@ class DeferredXMLRPCResponse:
 
         close_it = 0
 
-        if self.request.version == '1.0':
-            if connection == 'keep-alive':
-                self.request['Connection'] = 'Keep-Alive'
-            else:
-                close_it = 1
-        elif self.request.version == '1.1':
-            if connection == 'close':
-                close_it = 1
-        elif self.request.version is None:
+        if self.request.version == '1.0' and connection == 'keep-alive':
+            self.request['Connection'] = 'Keep-Alive'
+        elif (
+            self.request.version == '1.0'
+            or self.request.version == '1.1'
+            and connection == 'close'
+            or self.request.version != '1.1'
+            and self.request.version is None
+        ):
             close_it = 1
-
         outgoing_header = producers.simple_producer (
             self.request.build_reply_header())
 
@@ -142,14 +145,11 @@ class DeferredXMLRPCResponse:
             self.request.channel.close_when_done()
 
 def xmlrpc_marshal(value):
-    ismethodresponse = not isinstance(value, xmlrpclib.Fault)
-    if ismethodresponse:
-        if not isinstance(value, tuple):
-            value = (value,)
-        body = xmlrpclib.dumps(value, methodresponse=ismethodresponse)
-    else:
-        body = xmlrpclib.dumps(value)
-    return body
+    if not (ismethodresponse := not isinstance(value, xmlrpclib.Fault)):
+        return xmlrpclib.dumps(value)
+    if not isinstance(value, tuple):
+        value = (value,)
+    return xmlrpclib.dumps(value, methodresponse=ismethodresponse)
 
 class SystemNamespaceRPCInterface:
     def __init__(self, namespaces):
@@ -168,7 +168,7 @@ class SystemNamespaceRPCInterface:
                 func = getattr(namespace, method_name)
                 if callable(func):
                     if not method_name.startswith('_'):
-                        sig = '%s.%s' % (ns_name, method_name)
+                        sig = f'{ns_name}.{method_name}'
                         methods[sig] = str(func.__doc__)
         return methods
 
@@ -178,8 +178,7 @@ class SystemNamespaceRPCInterface:
         @return array result  An array of method names available (strings).
         """
         methods = self._listMethods()
-        keys = list(methods.keys())
-        keys.sort()
+        keys = sorted(methods.keys())
         return keys
 
     def methodHelp(self, name):
@@ -237,8 +236,8 @@ class SystemNamespaceRPCInterface:
 
         # args are only to fool scoping and are never passed by caller
         def multi(remaining_calls=remaining_calls,
-                  callbacks=callbacks,
-                  results=results):
+                      callbacks=callbacks,
+                      results=results):
 
             # if waiting on a callback, call it, then remove it if it's done
             if callbacks:
@@ -249,9 +248,8 @@ class SystemNamespaceRPCInterface:
                              'faultString': exc.text}
                 except:
                     info = sys.exc_info()
-                    errmsg = "%s:%s" % (info[0], info[1])
-                    value = {'faultCode': Faults.FAILED,
-                             'faultString': 'FAILED: ' + errmsg}
+                    errmsg = f"{info[0]}:{info[1]}"
+                    value = {'faultCode': Faults.FAILED, 'faultString': f'FAILED: {errmsg}'}
                 if value is not NOT_DONE_YET:
                     callbacks.pop(0)
                     results.append(value)
@@ -278,9 +276,8 @@ class SystemNamespaceRPCInterface:
                              'faultString': exc.text}
                 except:
                     info = sys.exc_info()
-                    errmsg = "%s:%s" % (info[0], info[1])
-                    value = {'faultCode': Faults.FAILED,
-                             'faultString': 'FAILED: ' + errmsg}
+                    errmsg = f"{info[0]}:{info[1]}"
+                    value = {'faultCode': Faults.FAILED, 'faultString': f'FAILED: {errmsg}'}
 
                 if isinstance(value, types.FunctionType):
                     callbacks.append(value)
@@ -288,19 +285,14 @@ class SystemNamespaceRPCInterface:
                     results.append(value)
 
             # we are done when there's no callback and no more calls queued
-            if callbacks or remaining_calls:
-                return NOT_DONE_YET
-            else:
-                return results
+            return NOT_DONE_YET if callbacks or remaining_calls else results
+
         multi.delay = 0.05
 
         # optimization: multi() is called here instead of just returning
         # multi in case all calls complete and we can return with no delay.
         value = multi()
-        if value is NOT_DONE_YET:
-            return multi
-        else:
-            return value
+        return multi if value is NOT_DONE_YET else value
 
 class AttrDict(dict):
     # hack to make a dict's getattr equivalent to its getitem
@@ -350,8 +342,7 @@ class supervisor_xmlrpc_handler(xmlrpc_handler):
     def loads(self, data):
         params = method = None
         for action, elem in iterparse(StringIO(data)):
-            unmarshall = self.unmarshallers.get(elem.tag)
-            if unmarshall:
+            if unmarshall := self.unmarshallers.get(elem.tag):
                 data = unmarshall(elem)
                 elem.clear()
                 elem.text = data
@@ -365,7 +356,7 @@ class supervisor_xmlrpc_handler(xmlrpc_handler):
             elif elem.tag == "methodName":
                 method = elem.text
             elif elem.tag == "params":
-                params = tuple([v.text for v in elem])
+                params = tuple(v.text for v in elem)
         return params, method
 
     def match(self, request):
@@ -406,10 +397,9 @@ class supervisor_xmlrpc_handler(xmlrpc_handler):
                 params = ()
 
             try:
-                logger.trace('XML-RPC method called: %s()' % method)
+                logger.trace(f'XML-RPC method called: {method}()')
                 value = self.call(method, params)
-                logger.trace('XML-RPC method %s() returned successfully' %
-                             method)
+                logger.trace(f'XML-RPC method {method}() returned successfully')
             except RPCError as err:
                 # turn RPCError reported by method into a Fault instance
                 value = xmlrpclib.Fault(err.code, err.text)
@@ -502,7 +492,7 @@ class SupervisorTransport(xmlrpclib.Transport):
                 return conn
             self._get_connection = get_connection
         else:
-            raise ValueError('Unknown protocol for serverurl %s' % serverurl)
+            raise ValueError(f'Unknown protocol for serverurl {serverurl}')
 
     def close(self):
         if self.connection:
@@ -521,11 +511,11 @@ class SupervisorTransport(xmlrpclib.Transport):
 
             # basic auth
             if self.username is not None and self.password is not None:
-                unencoded = "%s:%s" % (self.username, self.password)
+                unencoded = f"{self.username}:{self.password}"
                 encoded = as_string(encodestring(as_bytes(unencoded)))
                 encoded = encoded.replace('\n', '')
                 encoded = encoded.replace('\012', '')
-                self.headers["Authorization"] = "Basic %s" % encoded
+                self.headers["Authorization"] = f"Basic {encoded}"
 
         self.headers["Content-Length"] = str(len(request_body))
 
@@ -590,9 +580,8 @@ def gettags(comment):
                 tag_text = [parts[3].lstrip()]
             tag = parts[0][1:]
             tag_lineno = lineno
-        else:
-            if line:
-                tag_text.append(line)
+        elif line:
+            tag_text.append(line)
         lineno += 1
 
     tags.append((tag_lineno, tag, datatype, name, '\n'.join(tag_text)))

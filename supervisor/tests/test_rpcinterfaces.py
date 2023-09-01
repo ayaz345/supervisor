@@ -2146,8 +2146,7 @@ class SystemNamespaceXMLRPCInterfaceTests(TestBase):
         interface = self._makeOne()
         methods = interface.listMethods()
         methods.sort()
-        keys = list(interface._listMethods().keys())
-        keys.sort()
+        keys = sorted(interface._listMethods().keys())
         self.assertEqual(methods, keys)
 
     def test_methodSignature(self):
@@ -2161,20 +2160,28 @@ class SystemNamespaceXMLRPCInterfaceTests(TestBase):
 
     def test_allMethodDocs(self):
         from supervisor import xmlrpc
-        # belt-and-suspenders test for docstring-as-typing parsing correctness
-        # and documentation validity vs. implementation
-        _RPCTYPES = ['int', 'double', 'string', 'boolean', 'dateTime.iso8601',
-                     'base64', 'binary', 'array', 'struct']
         interface = self._makeOne()
         methods = interface._listMethods()
+        _RPCTYPES = [
+            'int',
+            'double',
+            'string',
+            'boolean',
+            'dateTime.iso8601',
+            'base64',
+            'binary',
+            'array',
+            'struct',
+        ]
         for k in methods.keys():
             # if a method doesn't have a @return value, an RPCError is raised.
             # Detect that here.
             try:
                 interface.methodSignature(k)
             except xmlrpc.RPCError:
-                raise AssertionError('methodSignature for %s raises '
-                                     'RPCError (missing @return doc?)' % k)
+                raise AssertionError(
+                    f'methodSignature for {k} raises RPCError (missing @return doc?)'
+                )
 
             # we want to test that the number of arguments implemented in
             # the function is the same as the number of arguments implied by
@@ -2211,16 +2218,13 @@ class SystemNamespaceXMLRPCInterfaceTests(TestBase):
                     rnames.append(thing[3]) # function name
                     rtexts.append(thing[4])  # description
                 elif thing[1] is not None:
-                    raise AssertionError(
-                        'unknown tag type %s for %s, parsed %s' % (thing[1],
-                                                                   k,
-                                                                   parsed))
+                    raise AssertionError(f'unknown tag type {thing[1]} for {k}, parsed {parsed}')
             # param tokens
 
             if len(argnames) != len(pnames):
-                raise AssertionError('Incorrect documentation '
-                                     '(%s args, %s doc params) in %s'
-                                     % (len(argnames), len(pnames), k))
+                raise AssertionError(
+                    f'Incorrect documentation ({len(argnames)} args, {len(pnames)} doc params) in {k}'
+                )
             for docline in plines:
                 self.assertTrue(type(docline) == int, (docline,
                                                        type(docline),
@@ -2241,8 +2245,7 @@ class SystemNamespaceXMLRPCInterfaceTests(TestBase):
             # result tokens
 
             if len(rlines) > 1:
-                raise AssertionError(
-                    'Duplicate @return values in docs for %s' % k)
+                raise AssertionError(f'Duplicate @return values in docs for {k}')
             for docline in rlines:
                 self.assertTrue(type(docline) == int, (docline,
                                                        type(docline), k))

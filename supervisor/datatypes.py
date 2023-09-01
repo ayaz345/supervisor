@@ -35,7 +35,7 @@ def boolean(s):
     elif ss in FALSY_STRINGS:
         return False
     else:
-        raise ValueError("not a valid boolean value: " + repr(s))
+        raise ValueError(f"not a valid boolean value: {repr(s)}")
 
 def list_of_strings(arg):
     if not arg:
@@ -43,26 +43,25 @@ def list_of_strings(arg):
     try:
         return [x.strip() for x in arg.split(',')]
     except:
-        raise ValueError("not a valid list of strings: " + repr(arg))
+        raise ValueError(f"not a valid list of strings: {repr(arg)}")
 
 def list_of_ints(arg):
     if not arg:
         return []
-    else:
-        try:
-            return list(map(int, arg.split(",")))
-        except:
-            raise ValueError("not a valid list of ints: " + repr(arg))
+    try:
+        return list(map(int, arg.split(",")))
+    except:
+        raise ValueError(f"not a valid list of ints: {repr(arg)}")
 
 def list_of_exitcodes(arg):
     try:
         vals = list_of_ints(arg)
         for val in vals:
             if (val > 255) or (val < 0):
-                raise ValueError('Invalid exit code "%s"' % val)
+                raise ValueError(f'Invalid exit code "{val}"')
         return vals
     except:
-        raise ValueError("not a valid list of exit codes: " + repr(arg))
+        raise ValueError(f"not a valid list of exit codes: {repr(arg)}")
 
 def dict_of_key_value_pairs(arg):
     """ parse KEY=val,KEY2=val2 into {'KEY':'val', 'KEY2':'val2'}
@@ -75,14 +74,11 @@ def dict_of_key_value_pairs(arg):
     tokens_len = len(tokens)
 
     D = {}
-    i = 0
-    while i < tokens_len:
+    for i in range(0, tokens_len, 4):
         k_eq_v = tokens[i:i+3]
         if len(k_eq_v) != 3 or k_eq_v[1] != '=':
-            raise ValueError(
-                "Unexpected end of key/value pairs in value '%s'" % arg)
+            raise ValueError(f"Unexpected end of key/value pairs in value '{arg}'")
         D[k_eq_v[0]] = k_eq_v[2].strip('\'"')
-        i += 4
     return D
 
 class Automatic:
@@ -97,11 +93,7 @@ LOGFILE_AUTOS = (Automatic, 'auto')
 LOGFILE_SYSLOGS = (Syslog, 'syslog')
 
 def logfile_name(val):
-    if hasattr(val, 'lower'):
-        coerced = val.lower()
-    else:
-        coerced = val
-
+    coerced = val.lower() if hasattr(val, 'lower') else val
     if coerced in LOGFILE_NONES:
         return None
     elif coerced in LOGFILE_AUTOS:
@@ -122,11 +114,9 @@ class RangeCheckedConversion:
     def __call__(self, value):
         v = self._conversion(value)
         if self._min is not None and v < self._min:
-            raise ValueError("%s is below lower bound (%s)"
-                             % (repr(v), repr(self._min)))
+            raise ValueError(f"{repr(v)} is below lower bound ({repr(self._min)})")
         if self._max is not None and v > self._max:
-            raise ValueError("%s is above upper bound (%s)"
-                             % (repr(v), repr(self._max)))
+            raise ValueError(f"{repr(v)} is above upper bound ({repr(self._max)})")
         return v
 
 port_number = RangeCheckedConversion(integer, min=1, max=0xffff).__call__
@@ -167,21 +157,13 @@ class SocketConfig:
     backlog = None # socket listen backlog
 
     def __repr__(self):
-        return '<%s at %s for %s>' % (self.__class__,
-                                      id(self),
-                                      self.url)
+        return f'<{self.__class__} at {id(self)} for {self.url}>'
 
     def __str__(self):
         return str(self.url)
 
     def __eq__(self, other):
-        if not isinstance(other, SocketConfig):
-            return False
-
-        if self.url != other.url:
-            return False
-
-        return True
+        return False if not isinstance(other, SocketConfig) else self.url == other.url
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -230,7 +212,7 @@ class UnixStreamSocketConfig(SocketConfig):
 
     def __init__(self, path, **kwargs):
         self.path = path
-        self.url = 'unix://%s' % path
+        self.url = f'unix://{path}'
         self.mode = kwargs.get('mode', None)
         self.owner = kwargs.get('owner', None)
         self.backlog = kwargs.get('backlog', None)
@@ -264,16 +246,14 @@ class UnixStreamSocketConfig(SocketConfig):
             try:
                 os.chmod(self.path, self.mode)
             except Exception as e:
-                raise ValueError("Could not change permissions of socket "
-                                    + "file: %s" % e)
+                raise ValueError(f"Could not change permissions of socket file: {e}")
 
     def _chown(self):
         if self.owner is not None:
             try:
                 os.chown(self.path, self.owner[0], self.owner[1])
             except Exception as e:
-                raise ValueError("Could not change ownership of socket file: "
-                                    + "%s" % e)
+                raise ValueError(f"Could not change ownership of socket file: {e}")
 
 def colon_separated_user_group(arg):
     """ Find a user ID and group ID from a string like 'user:group'.  Returns
@@ -290,7 +270,7 @@ def colon_separated_user_group(arg):
             gid = name_to_gid(parts[1])
         return (uid, gid)
     except:
-        raise ValueError('Invalid user:group definition %s' % arg)
+        raise ValueError(f'Invalid user:group definition {arg}')
 
 def name_to_uid(name):
     """ Find a user ID from a string containing a user name or ID.
@@ -302,13 +282,13 @@ def name_to_uid(name):
         try:
             pwdrec = pwd.getpwnam(name)
         except KeyError:
-            raise ValueError("Invalid user name %s" % name)
+            raise ValueError(f"Invalid user name {name}")
         uid = pwdrec[2]
     else:
         try:
             pwd.getpwuid(uid) # check if uid is valid
         except KeyError:
-            raise ValueError("Invalid user id %s" % name)
+            raise ValueError(f"Invalid user id {name}")
     return uid
 
 def name_to_gid(name):
@@ -321,13 +301,13 @@ def name_to_gid(name):
         try:
             grprec = grp.getgrnam(name)
         except KeyError:
-            raise ValueError("Invalid group name %s" % name)
+            raise ValueError(f"Invalid group name {name}")
         gid = grprec[2]
     else:
         try:
             grp.getgrgid(gid) # check if gid is valid
         except KeyError:
-            raise ValueError("Invalid group id %s" % name)
+            raise ValueError(f"Invalid group id {name}")
     return gid
 
 def gid_for_uid(uid):
@@ -338,13 +318,13 @@ def octal_type(arg):
     try:
         return int(arg, 8)
     except (TypeError, ValueError):
-        raise ValueError('%s can not be converted to an octal type' % arg)
+        raise ValueError(f'{arg} can not be converted to an octal type')
 
 def existing_directory(v):
     nv = os.path.expanduser(v)
     if os.path.isdir(nv):
         return nv
-    raise ValueError('%s is not an existing directory' % v)
+    raise ValueError(f'{v} is not an existing directory')
 
 def existing_dirpath(v):
     nv = os.path.expanduser(v)
@@ -381,10 +361,14 @@ class SuffixMultiplier:
 
     def __call__(self, v):
         v = v.lower()
-        for s, m in self._d.items():
-            if v[-self._keysz:] == s:
-                return int(v[:-self._keysz]) * m
-        return int(v) * self._default
+        return next(
+            (
+                int(v[: -self._keysz]) * m
+                for s, m in self._d.items()
+                if v[-self._keysz :] == s
+            ),
+            int(v) * self._default,
+        )
 
 byte_size = SuffixMultiplier({'kb': 1024,
                               'mb': 1024*1024,
@@ -405,7 +389,7 @@ def signal_number(value):
     except (ValueError, TypeError):
         name = value.strip().upper()
         if not name.startswith('SIG'):
-            name = 'SIG' + name
+            name = f'SIG{name}'
         num = getattr(signal, name, None)
         if num is None:
             raise ValueError('value %r is not a valid signal name' % value)

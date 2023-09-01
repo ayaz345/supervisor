@@ -41,10 +41,13 @@ class ProcessLogEvent(Event):
         # % operator, otherwise implicit encodings to ASCII can cause
         # failures
         fmt = as_string('processname:%s groupname:%s pid:%s channel:%s\n%s')
-        result = fmt % (as_string(self.process.config.name),
-                        as_string(groupname), self.pid,
-                        as_string(self.channel), data)
-        return result
+        return fmt % (
+            as_string(self.process.config.name),
+            as_string(groupname),
+            self.pid,
+            as_string(self.channel),
+            data,
+        )
 
 class ProcessLogStdoutEvent(ProcessLogEvent):
     channel = 'stdout'
@@ -126,8 +129,7 @@ class ProcessStateEvent(Event):
         L = [('processname', self.process.config.name), ('groupname', groupname),
              ('from_state', getProcessStateDescription(self.from_state))]
         L.extend(self.extra_values)
-        s = ' '.join( [ '%s:%s' % (name, val) for (name, val) in L ] )
-        return s
+        return ' '.join([f'{name}:{val}' for (name, val) in L])
 
     def get_extra_values(self):
         return []
@@ -184,7 +186,7 @@ class TickEvent(Event):
         self.supervisord = supervisord
 
     def payload(self):
-        return 'when:%s' % self.when
+        return f'when:{self.when}'
 
 class Tick5Event(TickEvent):
     period = 5

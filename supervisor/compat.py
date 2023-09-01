@@ -12,16 +12,10 @@ if PY2: # pragma: no cover
     basestring = basestring
 
     def as_bytes(s, encoding='utf-8'):
-        if isinstance(s, str):
-            return s
-        else:
-            return s.encode(encoding)
+        return s if isinstance(s, str) else s.encode(encoding)
 
     def as_string(s, encoding='utf-8'):
-        if isinstance(s, unicode):
-            return s
-        else:
-            return s.decode(encoding)
+        return s if isinstance(s, unicode) else s.decode(encoding)
 
     def is_text_stream(stream):
         try:
@@ -48,16 +42,10 @@ else: # pragma: no cover
             str.__init__(self, string)
 
     def as_bytes(s, encoding='utf8'):
-        if isinstance(s, bytes):
-            return s
-        else:
-            return s.encode(encoding)
+        return s if isinstance(s, bytes) else s.encode(encoding)
 
     def as_string(s, encoding='utf8'):
-        if isinstance(s, str):
-            return s
-        else:
-            return s.decode(encoding)
+        return s if isinstance(s, str) else s.decode(encoding)
 
     def is_text_stream(stream):
         import _io
@@ -173,13 +161,8 @@ except ImportError: # pragma: no cover
     from pkg_resources import EntryPoint as _EntryPoint
 
     def import_spec(spec):
-        ep = _EntryPoint.parse("x=" + spec)
-        if hasattr(ep, 'resolve'):
-            # this is available on setuptools >= 10.2
-            return ep.resolve()
-        else:
-            # this causes a DeprecationWarning on setuptools >= 11.3
-            return ep.load(False)
+        ep = _EntryPoint.parse(f"x={spec}")
+        return ep.resolve() if hasattr(ep, 'resolve') else ep.load(False)
 
 try: # pragma: no cover
     import importlib.resources as _importlib_resources

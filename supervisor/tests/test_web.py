@@ -9,8 +9,7 @@ class DeferredWebProducerTests(unittest.TestCase):
         return DeferredWebProducer
 
     def _makeOne(self, request, callback):
-        producer = self._getTargetClass()(request, callback)
-        return producer
+        return self._getTargetClass()(request, callback)
 
     def test_ctor(self):
         request = DummyRequest('/index.html', [], '', '')
@@ -85,8 +84,7 @@ class UIHandlerTests(unittest.TestCase):
 
     def _makeOne(self):
         supervisord = DummySupervisor()
-        handler = self._getTargetClass()(supervisord)
-        return handler
+        return self._getTargetClass()(supervisord)
 
     def test_handle_request_no_view_method(self):
         request = DummyRequest('/foo.css', [], '', '', {'PATH_INFO':'/foo.css'})

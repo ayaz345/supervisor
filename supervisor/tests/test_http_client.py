@@ -68,8 +68,7 @@ class HTTPHandlerTests(unittest.TestCase):
             )
 
     def _makeListener(self):
-        listener = DummyListener()
-        return listener
+        return DummyListener()
 
     def test_get_url_not_None(self):
         inst = self._makeOne()

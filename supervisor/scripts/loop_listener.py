@@ -13,7 +13,7 @@ def main():
         headers, payload = childutils.listener.wait()
         if headers['eventname'].startswith('PROCESS_COMMUNICATION'):
             pheaders, pdata = childutils.eventdata(payload)
-            pname = '%s:%s' % (pheaders['processname'], pheaders['groupname'])
+            pname = f"{pheaders['processname']}:{pheaders['groupname']}"
             rpcinterface.supervisor.sendProcessStdin(pname, 'Got it yo\n')
         childutils.listener.ok()
 

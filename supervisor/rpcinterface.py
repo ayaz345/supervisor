@@ -92,11 +92,10 @@ class SupervisorNamespaceRPCInterface:
 
         state = self.supervisord.options.mood
         statename = getSupervisorStateDescription(state)
-        data =  {
-            'statecode':state,
-            'statename':statename,
-            }
-        return data
+        return {
+            'statecode': state,
+            'statename': statename,
+        }
 
     def getPID(self):
         """ Return the PID of supervisord
@@ -209,10 +208,10 @@ class SupervisorNamespaceRPCInterface:
 
         for config in self.supervisord.options.process_group_configs:
             if config.name == name:
-                result = self.supervisord.add_process_group(config)
-                if not result:
+                if result := self.supervisord.add_process_group(config):
+                    return True
+                else:
                     raise RPCError(Faults.ALREADY_ADDED, name)
-                return True
         raise RPCError(Faults.BAD_NAME, name)
 
     def removeProcessGroup(self, name):
@@ -225,10 +224,10 @@ class SupervisorNamespaceRPCInterface:
         if name not in self.supervisord.process_groups:
             raise RPCError(Faults.BAD_NAME, name)
 
-        result = self.supervisord.remove_process_group(name)
-        if not result:
+        if result := self.supervisord.remove_process_group(name):
+            return True
+        else:
             raise RPCError(Faults.STILL_RUNNING, name)
-        return True
 
     def _getAllProcesses(self, lexical=False):
         # if lexical is true, return processes sorted in lexical order,
@@ -236,25 +235,19 @@ class SupervisorNamespaceRPCInterface:
         all_processes = []
 
         if lexical:
-            group_names = list(self.supervisord.process_groups.keys())
-            group_names.sort()
+            group_names = sorted(self.supervisord.process_groups.keys())
             for group_name in group_names:
                 group = self.supervisord.process_groups[group_name]
-                process_names = list(group.processes.keys())
-                process_names.sort()
-                for process_name in process_names:
-                    process = group.processes[process_name]
-                    all_processes.append((group, process))
+                process_names = sorted(group.processes.keys())
+                all_processes.extend(
+                    (group, group.processes[process_name])
+                    for process_name in process_names
+                )
         else:
-            groups = list(self.supervisord.process_groups.values())
-            groups.sort() # asc by priority
-
+            groups = sorted(self.supervisord.process_groups.values())
             for group in groups:
-                processes = list(group.processes.values())
-                processes.sort() # asc by priority
-                for process in processes:
-                    all_processes.append((group, process))
-
+                processes = sorted(group.processes.values())
+                all_processes.extend((group, process) for process in processes)
         return all_processes
 
     def _getGroupAndProcess(self, name):
@@ -301,8 +294,7 @@ class SupervisorNamespaceRPCInterface:
             raise RPCError(Faults.ALREADY_STARTED, name)
 
         if process.get_state() == ProcessStates.UNKNOWN:
-            raise RPCError(Faults.FAILED,
-                           "%s is in an unknown process state" % name)
+            raise RPCError(Faults.FAILED, f"{name} is in an unknown process state")
 
         process.spawn()
 
@@ -341,10 +333,7 @@ class SupervisorNamespaceRPCInterface:
                 if state not in (ProcessStates.STARTING, ProcessStates.RUNNING):
                     raise RPCError(Faults.ABNORMAL_TERMINATION, name)
 
-                if state == ProcessStates.RUNNING:
-                    return True
-
-                return NOT_DONE_YET
+                return True if state == ProcessStates.RUNNING else NOT_DONE_YET
 
             onwait.delay = 0.05
             onwait.rpcinterface = self
@@ -366,8 +355,7 @@ class SupervisorNamespaceRPCInterface:
         if group is None:
             raise RPCError(Faults.BAD_NAME, name)
 
-        processes = list(group.processes.values())
-        processes.sort()
+        processes = sorted(group.processes.values())
         processes = [ (group, process) for process in processes ]
 
         startall = make_allfunc(processes, isNotRunning, self.startProcess,
@@ -434,9 +422,7 @@ class SupervisorNamespaceRPCInterface:
                 # virtue of the supervisord.reap() method being called
                 # during normal operations
                 process.stop_report()
-                if process.get_state() not in STOPPED_STATES:
-                    return NOT_DONE_YET
-                return True
+                return NOT_DONE_YET if process.get_state() not in STOPPED_STATES else True
 
             onwait.delay = 0
             onwait.rpcinterface = self
@@ -458,8 +444,7 @@ class SupervisorNamespaceRPCInterface:
         if group is None:
             raise RPCError(Faults.BAD_NAME, name)
 
-        processes = list(group.processes.values())
-        processes.sort()
+        processes = sorted(group.processes.values())
         processes = [ (group, process) for process in processes ]
 
         killall = make_allfunc(processes, isRunning, self.stopProcess,
@@ -512,7 +497,7 @@ class SupervisorNamespaceRPCInterface:
 
         msg = process.signal(sig)
 
-        if not msg is None:
+        if msg is not None:
             raise RPCError(Faults.FAILED, msg)
 
         return True
@@ -531,8 +516,7 @@ class SupervisorNamespaceRPCInterface:
         if group is None:
             raise RPCError(Faults.BAD_NAME, name)
 
-        processes = list(group.processes.values())
-        processes.sort()
+        processes = sorted(group.processes.values())
         processes = [(group, process) for process in processes]
 
         sendall = make_allfunc(processes, isSignallable, self.signalProcess,
@@ -598,7 +582,7 @@ class SupervisorNamespaceRPCInterface:
                      'serverurl': pconfig.serverurl,
                     }
                 # no support for these types in xml-rpc
-                d.update((k, 'auto') for k, v in d.items() if v is Automatic)
+                d |= ((k, 'auto') for k, v in d.items() if v is Automatic)
                 d.update((k, 'none') for k, v in d.items() if v is None)
                 configinfo.append(d)
 
@@ -616,12 +600,12 @@ class SupervisorNamespaceRPCInterface:
             uptime = now_dt - start_dt
             if _total_seconds(uptime) < 0: # system time set back
                 uptime = datetime.timedelta(0)
-            desc = 'pid %s, uptime %s' % (info['pid'], uptime)
+            desc = f"pid {info['pid']}, uptime {uptime}"
 
         elif state in (ProcessStates.FATAL, ProcessStates.BACKOFF):
             desc = info['spawnerr']
             if not desc:
-                desc = 'unknown error (try "tail %s")' % info['name']
+                desc = f"""unknown error (try "tail {info['name']}")"""
 
         elif state in (ProcessStates.STOPPED, ProcessStates.EXITED):
             if info['start']:
@@ -707,7 +691,7 @@ class SupervisorNamespaceRPCInterface:
         if process is None:
             raise RPCError(Faults.BAD_NAME, name)
 
-        logfile = getattr(process.config, '%s_logfile' % channel)
+        logfile = getattr(process.config, f'{channel}_logfile')
 
         if logfile is None or not os.path.exists(logfile):
             raise RPCError(Faults.NO_FILE, logfile)
@@ -748,7 +732,7 @@ class SupervisorNamespaceRPCInterface:
         if process is None:
             raise RPCError(Faults.BAD_NAME, name)
 
-        logfile = getattr(process.config, '%s_logfile' % channel)
+        logfile = getattr(process.config, f'{channel}_logfile')
 
         if logfile is None or not os.path.exists(logfile):
             return ['', 0, False]
@@ -861,10 +845,7 @@ class SupervisorNamespaceRPCInterface:
                      'description':'OK'}
                     )
 
-            if callbacks:
-                return NOT_DONE_YET
-
-            return results
+            return NOT_DONE_YET if callbacks else results
 
         clearall.delay = 0.05
         clearall.rpcinterface = self
@@ -939,13 +920,13 @@ def make_allfunc(processes, predicate, func, **extra_kwargs):
     results = []
 
     def allfunc(
-        processes=processes,
-        predicate=predicate,
-        func=func,
-        extra_kwargs=extra_kwargs,
-        callbacks=callbacks, # used only to fool scoping, never passed by caller
-        results=results, # used only to fool scoping, never passed by caller
-        ):
+            processes=processes,
+            predicate=predicate,
+            func=func,
+            extra_kwargs=extra_kwargs,
+            callbacks=callbacks, # used only to fool scoping, never passed by caller
+            results=results, # used only to fool scoping, never passed by caller
+            ):
 
         if not callbacks:
 
@@ -996,10 +977,7 @@ def make_allfunc(processes, predicate, func, **extra_kwargs):
                         )
                     callbacks.remove(struct)
 
-        if callbacks:
-            return NOT_DONE_YET
-
-        return results
+        return NOT_DONE_YET if callbacks else results
 
     # XXX the above implementation has a weakness inasmuch as the
     # first call into each individual process callback will always

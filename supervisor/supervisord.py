@@ -130,7 +130,7 @@ class Supervisor:
     def get_process_map(self):
         process_map = {}
         for group in self.process_groups.values():
-            process_map.update(group.get_dispatchers())
+            process_map |= group.get_dispatchers()
         return process_map
 
     def shutdown_report(self):
@@ -145,12 +145,11 @@ class Supervisor:
             if now > (self.lastshutdownreport + 3): # every 3 secs
                 names = [ as_string(p.config.name) for p in unstopped ]
                 namestr = ', '.join(names)
-                self.options.logger.info('waiting for %s to die' % namestr)
+                self.options.logger.info(f'waiting for {namestr} to die')
                 self.lastshutdownreport = now
                 for proc in unstopped:
                     state = getProcessStateDescription(proc.get_state())
-                    self.options.logger.blather(
-                        '%s state: %s' % (proc.config.name, state))
+                    self.options.logger.blather(f'{proc.config.name} state: {state}')
         return unstopped
 
     def ordered_stop_groups_phase_1(self):
@@ -179,12 +178,10 @@ class Supervisor:
 
         while 1:
             combined_map = {}
-            combined_map.update(socket_map)
+            combined_map |= socket_map
             combined_map.update(self.get_process_map())
 
-            pgroups = list(self.process_groups.values())
-            pgroups.sort()
-
+            pgroups = sorted(self.process_groups.values())
             if self.options.mood < SupervisorStates.RUNNING:
                 if not self.stopping:
                     # first time, set the stopping flag, do a
@@ -290,7 +287,7 @@ class Supervisor:
             process = self.options.pidhistory.get(pid, None)
             if process is None:
                 _, msg = decode_wait_status(sts)
-                self.options.logger.info('reaped unknown pid %s (%s)' % (pid, msg))
+                self.options.logger.info(f'reaped unknown pid {pid} ({msg})')
             else:
                 process.finish(pid, sts)
                 del self.options.pidhistory[pid]
@@ -300,32 +297,30 @@ class Supervisor:
                 self.reap(once=False, recursionguard=recursionguard+1)
 
     def handle_signal(self):
-        sig = self.options.get_signal()
-        if sig:
-            if sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
+        if not (sig := self.options.get_signal()):
+            return
+        if sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
+            self.options.logger.warn(f'received {signame(sig)} indicating exit request')
+            self.options.mood = SupervisorStates.SHUTDOWN
+        elif sig == signal.SIGHUP:
+            if self.options.mood == SupervisorStates.SHUTDOWN:
                 self.options.logger.warn(
-                    'received %s indicating exit request' % signame(sig))
-                self.options.mood = SupervisorStates.SHUTDOWN
-            elif sig == signal.SIGHUP:
-                if self.options.mood == SupervisorStates.SHUTDOWN:
-                    self.options.logger.warn(
-                        'ignored %s indicating restart request (shutdown in progress)' % signame(sig))
-                else:
-                    self.options.logger.warn(
-                        'received %s indicating restart request' % signame(sig))
-                    self.options.mood = SupervisorStates.RESTARTING
-            elif sig == signal.SIGCHLD:
-                self.options.logger.debug(
-                    'received %s indicating a child quit' % signame(sig))
-            elif sig == signal.SIGUSR2:
-                self.options.logger.info(
-                    'received %s indicating log reopen request' % signame(sig))
-                self.options.reopenlogs()
-                for group in self.process_groups.values():
-                    group.reopenlogs()
+                    f'ignored {signame(sig)} indicating restart request (shutdown in progress)'
+                )
             else:
-                self.options.logger.blather(
-                    'received %s indicating nothing' % signame(sig))
+                self.options.logger.warn(f'received {signame(sig)} indicating restart request')
+                self.options.mood = SupervisorStates.RESTARTING
+        elif sig == signal.SIGCHLD:
+            self.options.logger.debug(f'received {signame(sig)} indicating a child quit')
+        elif sig == signal.SIGUSR2:
+            self.options.logger.info(
+                f'received {signame(sig)} indicating log reopen request'
+            )
+            self.options.reopenlogs()
+            for group in self.process_groups.values():
+                group.reopenlogs()
+        else:
+            self.options.logger.blather(f'received {signame(sig)} indicating nothing')
 
     def get_state(self):
         return self.options.mood

@@ -43,22 +43,21 @@ class deferring_chunked_producer:
         self.footers = footers
         self.delay = 0.1
 
-    def more (self):
-        if self.producer:
-            data = self.producer.more()
-            if data is NOT_DONE_YET:
-                return NOT_DONE_YET
-            elif data:
-                s = '%x' % len(data)
-                return as_bytes(s) + b'\r\n' + data + b'\r\n'
-            else:
-                self.producer = None
-                if self.footers:
-                    return b'\r\n'.join([b'0'] + self.footers) + b'\r\n\r\n'
-                else:
-                    return b'0\r\n\r\n'
-        else:
+    def more(self):
+        if not self.producer:
             return b''
+        data = self.producer.more()
+        if data is NOT_DONE_YET:
+            return NOT_DONE_YET
+        elif data:
+            s = '%x' % len(data)
+            return as_bytes(s) + b'\r\n' + data + b'\r\n'
+        else:
+            self.producer = None
+            if self.footers:
+                return b'\r\n'.join([b'0'] + self.footers) + b'\r\n\r\n'
+            else:
+                return b'0\r\n\r\n'
 
 class deferring_composite_producer:
     """combine a fifo of producers into one"""
@@ -93,18 +92,17 @@ class deferring_globbing_producer:
         self.buffer_size = buffer_size
         self.delay = 0.1
 
-    def more (self):
+    def more(self):
         while len(self.buffer) < self.buffer_size:
             data = self.producer.more()
             if data is NOT_DONE_YET:
                 return NOT_DONE_YET
-            if data:
-                try:
-                    self.buffer = self.buffer + data
-                except TypeError:
-                    self.buffer = as_bytes(self.buffer) + as_bytes(data)
-            else:
+            if not data:
                 break
+            try:
+                self.buffer = self.buffer + data
+            except TypeError:
+                self.buffer = as_bytes(self.buffer) + as_bytes(data)
         r = self.buffer
         self.buffer = b''
         return r
@@ -123,19 +121,18 @@ class deferring_hooked_producer:
         self.bytes = 0
         self.delay = 0.1
 
-    def more (self):
-        if self.producer:
-            result = self.producer.more()
-            if result is NOT_DONE_YET:
-                return NOT_DONE_YET
-            if not result:
-                self.producer = None
-                self.function (self.bytes)
-            else:
-                self.bytes += len(result)
-            return result
-        else:
+    def more(self):
+        if not self.producer:
             return b''
+        result = self.producer.more()
+        if result is NOT_DONE_YET:
+            return NOT_DONE_YET
+        if not result:
+            self.producer = None
+            self.function (self.bytes)
+        else:
+            self.bytes += len(result)
+        return result
 
 
 class deferring_http_request(http_server.http_request):
@@ -165,28 +162,31 @@ class deferring_http_request(http_server.http_request):
         globbing = 1
 
         if self.version == '1.0':
-            if connection == 'keep-alive':
-                if not 'Content-Length' in self:
-                    close_it = 1
-                else:
-                    self['Connection'] = 'Keep-Alive'
-            else:
+            if (
+                connection == 'keep-alive'
+                and 'Content-Length' not in self
+                or connection != 'keep-alive'
+            ):
                 close_it = 1
+            else:
+                self['Connection'] = 'Keep-Alive'
         elif self.version == '1.1':
             if connection == 'close':
                 close_it = 1
-            elif not 'Content-Length' in self:
-                if 'Transfer-Encoding' in self:
-                    if not self['Transfer-Encoding'] == 'chunked':
-                        close_it = 1
-                elif self.use_chunked:
+            elif 'Content-Length' not in self:
+                if (
+                    'Transfer-Encoding' in self
+                    and self['Transfer-Encoding'] != 'chunked'
+                    or 'Transfer-Encoding' not in self
+                    and not self.use_chunked
+                ):
+                    close_it = 1
+                elif 'Transfer-Encoding' not in self:
                     self['Transfer-Encoding'] = 'chunked'
                     wrap_in_chunking = 1
                     # globbing slows down tail -f output, so only use it if
                     # we're not in chunked mode
                     globbing = 0
-                else:
-                    close_it = 1
         elif self.version is None:
             # Although we don't *really* support http/0.9 (because
             # we'd have to use \r\n as a terminator, and it would just
@@ -248,8 +248,6 @@ class deferring_http_request(http_server.http_request):
                 )
 
     def cgi_environment(self):
-        env = {}
-
         # maps request some headers to environment variables.
         # (those that don't start with 'HTTP_')
         header2env= {'content-length'    : 'CONTENT_LENGTH',
@@ -270,24 +268,22 @@ class deferring_http_request(http_server.http_request):
             query = query[1:]
 
         server = self.channel.server
-        env['REQUEST_METHOD'] = self.command.upper()
-        env['SERVER_PORT'] = str(server.port)
-        env['SERVER_NAME'] = server.server_name
-        env['SERVER_SOFTWARE'] = server.SERVER_IDENT
-        env['SERVER_PROTOCOL'] = "HTTP/" + self.version
+        env = {
+            'REQUEST_METHOD': self.command.upper(),
+            'SERVER_PORT': str(server.port),
+            'SERVER_NAME': server.server_name,
+            'SERVER_SOFTWARE': server.SERVER_IDENT,
+        }
+        env['SERVER_PROTOCOL'] = f"HTTP/{self.version}"
         env['channel.creation_time'] = self.channel.creation_time
         env['SCRIPT_NAME'] = ''
-        env['PATH_INFO'] = '/' + path
+        env['PATH_INFO'] = f'/{path}'
         env['PATH_TRANSLATED'] = os.path.normpath(os.path.join(
                 workdir, env['PATH_INFO']))
         if query:
             env['QUERY_STRING'] = query
         env['GATEWAY_INTERFACE'] = 'CGI/1.1'
-        if self.channel.addr:
-            env['REMOTE_ADDR'] = self.channel.addr[0]
-        else:
-            env['REMOTE_ADDR'] = '127.0.0.1'
-
+        env['REMOTE_ADDR'] = self.channel.addr[0] if self.channel.addr else '127.0.0.1'
         for header in self.header:
             key,value=header.split(":",1)
             key=key.lower()
@@ -295,7 +291,7 @@ class deferring_http_request(http_server.http_request):
             if key in header2env and value:
                 env[header2env.get(key)]=value
             else:
-                key='HTTP_%s' % ("_".join(key.split( "-"))).upper()
+                key = f'HTTP_{"_".join(key.split("-")).upper()}'
                 if value and key not in env:
                     env[key]=value
         return env
@@ -323,8 +319,8 @@ class deferring_http_request(http_server.http_request):
         if port is None or default_port[protocol] == port:
             host = hostname
         else:
-            host = hostname + ':' + port
-        server_url = '%s://%s' % (protocol, host)
+            host = f'{hostname}:{port}'
+        server_url = f'{protocol}://{host}'
         if server_url[-1:]=='/':
             server_url=server_url[:-1]
         return server_url
@@ -345,47 +341,45 @@ class deferring_http_channel(http_server.http_channel):
         if self.delay:
             # we called a deferred producer via this channel (see refill_buffer)
             elapsed = now - self.last_writable_check
-            if (elapsed > self.delay) or (elapsed < 0):
-                self.last_writable_check = now
-                return True
-            else:
+            if elapsed <= self.delay and elapsed >= 0:
                 return False
 
+            self.last_writable_check = now
+            return True
         return http_server.http_channel.writable(self)
 
-    def refill_buffer (self):
+    def refill_buffer(self):
         """ Implement deferreds """
         while 1:
-            if len(self.producer_fifo):
-                p = self.producer_fifo.first()
-                # a 'None' in the producer fifo is a sentinel,
-                # telling us to close the channel.
-                if p is None:
-                    if not self.ac_out_buffer:
-                        self.producer_fifo.pop()
-                        self.close()
-                    return
-                elif isinstance(p, bytes):
+            if not len(self.producer_fifo):
+                return
+            p = self.producer_fifo.first()
+            # a 'None' in the producer fifo is a sentinel,
+            # telling us to close the channel.
+            if p is None:
+                if not self.ac_out_buffer:
                     self.producer_fifo.pop()
-                    self.ac_out_buffer += p
-                    return
-
-                data = p.more()
-
-                if data is NOT_DONE_YET:
-                    self.delay = p.delay
-                    return
-
-                elif data:
-                    self.ac_out_buffer = self.ac_out_buffer + data
-                    self.delay = False
-                    return
-                else:
-                    self.producer_fifo.pop()
-            else:
+                    self.close()
+                return
+            elif isinstance(p, bytes):
+                self.producer_fifo.pop()
+                self.ac_out_buffer += p
                 return
 
-    def found_terminator (self):
+            data = p.more()
+
+            if data is NOT_DONE_YET:
+                self.delay = p.delay
+                return
+
+            elif data:
+                self.ac_out_buffer = self.ac_out_buffer + data
+                self.delay = False
+                return
+            else:
+                self.producer_fifo.pop()
+
+    def found_terminator(self):
         """ We only override this to use 'deferring_http_request' class
         instead of the normal http_request class; it sucks to need to override
         this """
@@ -424,7 +418,7 @@ class deferring_http_channel(http_server.http_channel):
             rpath, rquery = http_server.splitquery(uri)
             if '%' in rpath:
                 if rquery:
-                    uri = http_server.unquote(rpath) + '?' + rquery
+                    uri = f'{http_server.unquote(rpath)}?{rquery}'
                 else:
                     uri = http_server.unquote(rpath)
 
@@ -434,7 +428,7 @@ class deferring_http_channel(http_server.http_channel):
             self.server.total_requests.increment()
 
             if command is None:
-                self.log_info ('Bad HTTP request: %s' % repr(request), 'error')
+                self.log_info(f'Bad HTTP request: {repr(request)}', 'error')
                 r.error (400)
                 return
 
@@ -451,11 +445,11 @@ class deferring_http_channel(http_server.http_channel):
                     except:
                         self.server.exceptions.increment()
                         (file, fun, line), t, v, tbinfo = \
-                               asyncore.compact_traceback()
+                                   asyncore.compact_traceback()
                         self.server.log_info(
-                            'Server Error: %s, %s: file: %s line: %s' %
-                            (t,v,file,line),
-                            'error')
+                            f'Server Error: {t}, {v}: file: {file} line: {line}',
+                            'error',
+                        )
                         try:
                             r.error (500)
                         except:
@@ -513,9 +507,7 @@ class supervisor_http_server(http_server.http_server):
                 )
 
     def log_info(self, message, type='info'):
-        ip = ''
-        if getattr(self, 'ip', None) is not None:
-            ip = self.ip
+        ip = self.ip if getattr(self, 'ip', None) is not None else ''
         self.logger.log(ip, message)
 
 class supervisor_af_inet_http_server(supervisor_http_server):
@@ -577,9 +569,7 @@ class supervisor_af_unix_http_server(supervisor_http_server):
                     # hard link
                     os.link(tempname, socketname)
                 except OSError:
-                    # Lock contention, or stale socket.
-                    used = self.checkused(socketname)
-                    if used:
+                    if used := self.checkused(socketname):
                         # cooperate with 'openhttpserver' in supervisord
                         raise socket.error(errno.EADDRINUSE)
 
@@ -734,7 +724,7 @@ class logtail_handler:
             request.error(404) # not found
             return
 
-        logfile = getattr(process.config, '%s_logfile' % channel, None)
+        logfile = getattr(process.config, f'{channel}_logfile', None)
 
         if logfile is None or not os.path.exists(logfile):
             # we return 404 because no logfile is a temporary condition.
@@ -822,7 +812,7 @@ def make_http_servers(options, supervisord):
             except:
                 tb = traceback.format_exc()
                 options.logger.warn(tb)
-                raise ValueError('Could not make %s rpc interface' % name)
+                raise ValueError(f'Could not make {name} rpc interface')
             subinterfaces.append((name, inst))
             options.logger.info('RPC interface %r initialized' % name)
 
@@ -837,10 +827,9 @@ def make_http_servers(options, supervisord):
         filesystem = filesys.os_filesystem(templatedir)
         defaulthandler = default_handler.default_handler(filesystem)
 
-        username = config['username']
         password = config['password']
 
-        if username:
+        if username := config['username']:
             # wrap the xmlrpc handler and tailhandler in an authentication
             # handler
             users = {username:password}
@@ -887,15 +876,13 @@ class encrypted_dictionary_authorizer:
 
     def authorize(self, auth_info):
         username, password = auth_info
-        if username in self.dict:
-            stored_password = self.dict[username]
-            if stored_password.startswith('{SHA}'):
-                password_hash = sha1(as_bytes(password)).hexdigest()
-                return stored_password[5:] == password_hash
-            else:
-                return stored_password == password
-        else:
+        if username not in self.dict:
             return False
+        stored_password = self.dict[username]
+        if not stored_password.startswith('{SHA}'):
+            return stored_password == password
+        password_hash = sha1(as_bytes(password)).hexdigest()
+        return stored_password[5:] == password_hash
 
 class supervisor_auth_handler(auth_handler):
     def __init__(self, dict, handler, realm='default'):

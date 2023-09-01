@@ -307,7 +307,7 @@ class IncludeTestsMixin(object):
         from supervisor.compat import letters
         a_z = letters[:26]
         for letter in reversed(a_z):
-            filename = os.path.join(conf_d, "%s.conf" % letter)
+            filename = os.path.join(conf_d, f"{letter}.conf")
             with open(filename, "w") as f:
                 f.write("[program:%s]\n"
                         "command=/bin/%s\n" % (letter, letter))
@@ -319,9 +319,8 @@ class IncludeTestsMixin(object):
             shutil.rmtree(dirname, ignore_errors=True)
         expected_msgs = []
         for letter in sorted(a_z):
-            filename = os.path.join(conf_d, "%s.conf" % letter)
-            expected_msgs.append(
-                'Included extra file "%s" during parsing' % filename)
+            filename = os.path.join(conf_d, f"{letter}.conf")
+            expected_msgs.append(f'Included extra file "{filename}" during parsing')
         self.assertEqual(instance.parse_infos, expected_msgs)
 
     def test_read_config_include_extra_file_malformed(self):
@@ -350,7 +349,7 @@ class IncludeTestsMixin(object):
         except ValueError as exc:
             self.assertTrue('contains parsing errors:' in exc.args[0])
             self.assertTrue(malformed_file in exc.args[0])
-            msg = 'Included extra file "%s" during parsing' % malformed_file
+            msg = f'Included extra file "{malformed_file}" during parsing'
             self.assertTrue(msg in instance.parse_infos)
         finally:
             shutil.rmtree(dirname, ignore_errors=True)
@@ -503,7 +502,8 @@ class ClientOptionsTests(unittest.TestCase, IncludeTestsMixin):
     def test_read_config_unreadable(self):
         instance = self._makeOne()
         def dummy_open(fn, mode):
-            raise IOError(errno.EACCES, 'Permission denied: %s' % fn)
+            raise IOError(errno.EACCES, f'Permission denied: {fn}')
+
         instance.open = dummy_open
 
         try:
@@ -566,11 +566,11 @@ class ClientOptionsTests(unittest.TestCase, IncludeTestsMixin):
             shutil.rmtree(dirname, ignore_errors=True)
         options = instance.configroot.supervisorctl
         history_file = os.path.join(conf_d, 'sc_history')
-        self.assertEqual(options.serverurl, 'unix://' + conf_d + '/supervisord.sock')
+        self.assertEqual(options.serverurl, f'unix://{conf_d}/supervisord.sock')
         self.assertEqual(options.history_file, history_file)
-        msg = 'Included extra file "%s" during parsing' % conf_file
+        msg = f'Included extra file "{conf_file}" during parsing'
         self.assertTrue(msg in instance.parse_infos)
-        msg = 'Included extra file "%s" during parsing' % ini_file
+        msg = f'Included extra file "{ini_file}" during parsing'
         self.assertTrue(msg in instance.parse_infos)
 
     def test_read_config_include_expands_here(self):
@@ -1011,7 +1011,8 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
     def test_read_config_unreadable(self):
         instance = self._makeOne()
         def dummy_open(fn, mode):
-            raise IOError(errno.EACCES, 'Permission denied: %s' % fn)
+            raise IOError(errno.EACCES, f'Permission denied: {fn}')
+
         instance.open = dummy_open
 
         try:
@@ -1047,9 +1048,9 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
             instance.read_config(StringIO(text))
             self.fail("nothing raised")
         except ValueError as exc:
-            self.assertEqual(exc.args[0],
-                "The directory named as part of the path %s does not exist" %
-                logfile_with_nonexistent_dir
+            self.assertEqual(
+                exc.args[0],
+                f"The directory named as part of the path {logfile_with_nonexistent_dir} does not exist",
             )
 
     def test_read_config_no_supervisord_section_raises_valueerror(self):
@@ -1091,9 +1092,9 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
             shutil.rmtree(dirname, ignore_errors=True)
         options = instance.configroot.supervisord
         self.assertEqual(len(options.server_configs), 2)
-        msg = 'Included extra file "%s" during parsing' % conf_file
+        msg = f'Included extra file "{conf_file}" during parsing'
         self.assertTrue(msg in instance.parse_infos)
-        msg = 'Included extra file "%s" during parsing' % ini_file
+        msg = f'Included extra file "{ini_file}" during parsing'
         self.assertTrue(msg in instance.parse_infos)
 
     def test_read_config_include_expands_host_node_name(self):
@@ -1111,7 +1112,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         with open(supervisord_conf, 'w') as f:
             f.write(text)
 
-        conf_file = os.path.join(conf_d, "%s.conf" % platform.node())
+        conf_file = os.path.join(conf_d, f"{platform.node()}.conf")
         with open(conf_file, 'w') as f:
             f.write("[inet_http_server]\nport=8000\n")
 
@@ -1122,7 +1123,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
             shutil.rmtree(dirname, ignore_errors=True)
         options = instance.configroot.supervisord
         self.assertEqual(len(options.server_configs), 1)
-        msg = 'Included extra file "%s" during parsing' % conf_file
+        msg = f'Included extra file "{conf_file}" during parsing'
         self.assertTrue(msg in instance.parse_infos)
 
     def test_read_config_include_expands_here(self):
@@ -1185,14 +1186,16 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         recorder = []
         def record_usage(message):
             recorder.append(message)
+
         instance.usage = record_usage
 
         instance.configfile=StringIO('[supervisord]')
         args = ['foo', 'bar']
         instance.realize(args=args)
         self.assertEqual(len(recorder), 1)
-        self.assertEqual(recorder[0],
-            'positional arguments are not supported: %s' % args)
+        self.assertEqual(
+            recorder[0], f'positional arguments are not supported: {args}'
+        )
 
     def test_realize_getopt_error(self):
         instance = self._makeOne()
@@ -1748,7 +1751,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         config = UnhosedConfigParser()
         config.read_string(text)
         pconfigs = instance.processes_from_section(config, 'program:foo', 'bar')
-        expected = "/bin/foo --host=" + platform.node()
+        expected = f"/bin/foo --host={platform.node()}"
         self.assertEqual(pconfigs[0].command, expected)
 
     def test_processes_from_section_process_num_expansion(self):
@@ -1819,7 +1822,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         config = UnhosedConfigParser()
         config.read_string(text)
         pconfigs = instance.processes_from_section(config, 'program:foo', 'bar')
-        expected = "/bin/foo --path='%s'" % os.environ['PATH']
+        expected = f"/bin/foo --path='{os.environ['PATH']}'"
         self.assertEqual(pconfigs[0].command, expected)
 
     def test_processes_from_section_expands_env_in_environment(self):
@@ -1833,7 +1836,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         config = UnhosedConfigParser()
         config.read_string(text)
         pconfigs = instance.processes_from_section(config, 'program:foo', 'bar')
-        expected = "/foo/bar:%s" % os.environ['PATH']
+        expected = f"/foo/bar:{os.environ['PATH']}"
         self.assertEqual(pconfigs[0].environment['PATH'], expected)
 
     def test_processes_from_section_redirect_stderr_with_filename(self):
@@ -2233,10 +2236,7 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
 
         cat_group = section.process_group_configs[0]
         cat_0 = cat_group.process_configs[0]
-        expected = '%s --foo=bar --num=0 --node=%s' % (
-            os.path.join(here, 'bin/cat'),
-            platform.node()
-            )
+        expected = f"{os.path.join(here, 'bin/cat')} --foo=bar --num=0 --node={platform.node()}"
         self.assertEqual(cat_0.command, expected)
 
     def test_options_error_handler_shows_main_filename(self):
@@ -3259,15 +3259,14 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
             sid = 'supervisor'
             instance.identifier = sid
             logfn = instance.get_autochildlog_name('foo', sid,'stdout')
-            first = logfn + '.1'
-            second = logfn + '.2'
-            f1 = open(first, 'w')
-            f2 = open(second, 'w')
-            instance.clear_autochildlogdir()
-            self.assertFalse(os.path.exists(logfn))
-            self.assertFalse(os.path.exists(first))
-            self.assertFalse(os.path.exists(second))
-            f1.close()
+            first = f'{logfn}.1'
+            second = f'{logfn}.2'
+            with open(first, 'w') as f1:
+                f2 = open(second, 'w')
+                instance.clear_autochildlogdir()
+                self.assertFalse(os.path.exists(logfn))
+                self.assertFalse(os.path.exists(first))
+                self.assertFalse(os.path.exists(second))
             f2.close()
         finally:
             shutil.rmtree(dn, ignore_errors=True)
@@ -3284,16 +3283,16 @@ class ServerOptionsTests(unittest.TestCase, IncludeTestsMixin):
         instance = self._makeOne()
         instance.childlogdir = dirname
         ident = instance.identifier
-        filename = os.path.join(dirname, 'cat-stdout---%s-ayWAp9.log' % ident)
+        filename = os.path.join(dirname, f'cat-stdout---{ident}-ayWAp9.log')
         with open(filename, 'w') as f:
             f.write("log")
         def raise_oserror(*args):
             raise OSError(errno.ENOENT)
+
         instance.remove = raise_oserror
         instance.logger = DummyLogger()
         instance.clear_autochildlogdir()
-        self.assertEqual(instance.logger.data,
-            ["Failed to clean up '%s'" % filename])
+        self.assertEqual(instance.logger.data, [f"Failed to clean up '{filename}'"])
 
     def test_openhttpservers_reports_friendly_usage_when_eaddrinuse(self):
         supervisord = DummySupervisor()
@@ -3415,22 +3414,40 @@ class ProcessConfigTests(unittest.TestCase):
         return ProcessConfig
 
     def _makeOne(self, *arg, **kw):
-        defaults = {}
-        for name in ('name', 'command', 'directory', 'umask',
-                     'priority', 'autostart', 'autorestart',
-                     'startsecs', 'startretries', 'uid',
-                     'stdout_logfile', 'stdout_capture_maxbytes',
-                     'stdout_events_enabled', 'stdout_syslog',
-                     'stderr_logfile', 'stderr_capture_maxbytes',
-                     'stderr_events_enabled', 'stderr_syslog',
-                     'stopsignal', 'stopwaitsecs', 'stopasgroup',
-                     'killasgroup', 'exitcodes', 'redirect_stderr',
-                     'environment'):
-            defaults[name] = name
+        defaults = {
+            name: name
+            for name in (
+                'name',
+                'command',
+                'directory',
+                'umask',
+                'priority',
+                'autostart',
+                'autorestart',
+                'startsecs',
+                'startretries',
+                'uid',
+                'stdout_logfile',
+                'stdout_capture_maxbytes',
+                'stdout_events_enabled',
+                'stdout_syslog',
+                'stderr_logfile',
+                'stderr_capture_maxbytes',
+                'stderr_events_enabled',
+                'stderr_syslog',
+                'stopsignal',
+                'stopwaitsecs',
+                'stopasgroup',
+                'killasgroup',
+                'exitcodes',
+                'redirect_stderr',
+                'environment',
+            )
+        }
         for name in ('stdout_logfile_backups', 'stdout_logfile_maxbytes',
                      'stderr_logfile_backups', 'stderr_logfile_maxbytes'):
             defaults[name] = 10
-        defaults.update(kw)
+        defaults |= kw
         return self._getTargetClass()(*arg, **defaults)
 
     def test_get_path_env_is_None_delegates_to_options(self):
@@ -3513,22 +3530,40 @@ class EventListenerConfigTests(unittest.TestCase):
         return EventListenerConfig
 
     def _makeOne(self, *arg, **kw):
-        defaults = {}
-        for name in ('name', 'command', 'directory', 'umask',
-                     'priority', 'autostart', 'autorestart',
-                     'startsecs', 'startretries', 'uid',
-                     'stdout_logfile', 'stdout_capture_maxbytes',
-                     'stdout_events_enabled', 'stdout_syslog',
-                     'stderr_logfile', 'stderr_capture_maxbytes',
-                     'stderr_events_enabled', 'stderr_syslog',
-                     'stopsignal', 'stopwaitsecs', 'stopasgroup',
-                     'killasgroup', 'exitcodes', 'redirect_stderr',
-                     'environment'):
-            defaults[name] = name
+        defaults = {
+            name: name
+            for name in (
+                'name',
+                'command',
+                'directory',
+                'umask',
+                'priority',
+                'autostart',
+                'autorestart',
+                'startsecs',
+                'startretries',
+                'uid',
+                'stdout_logfile',
+                'stdout_capture_maxbytes',
+                'stdout_events_enabled',
+                'stdout_syslog',
+                'stderr_logfile',
+                'stderr_capture_maxbytes',
+                'stderr_events_enabled',
+                'stderr_syslog',
+                'stopsignal',
+                'stopwaitsecs',
+                'stopasgroup',
+                'killasgroup',
+                'exitcodes',
+                'redirect_stderr',
+                'environment',
+            )
+        }
         for name in ('stdout_logfile_backups', 'stdout_logfile_maxbytes',
                      'stderr_logfile_backups', 'stderr_logfile_maxbytes'):
             defaults[name] = 10
-        defaults.update(kw)
+        defaults |= kw
         return self._getTargetClass()(*arg, **defaults)
 
     def test_make_dispatchers(self):
@@ -3561,22 +3596,40 @@ class FastCGIProcessConfigTests(unittest.TestCase):
         return FastCGIProcessConfig
 
     def _makeOne(self, *arg, **kw):
-        defaults = {}
-        for name in ('name', 'command', 'directory', 'umask',
-                     'priority', 'autostart', 'autorestart',
-                     'startsecs', 'startretries', 'uid',
-                     'stdout_logfile', 'stdout_capture_maxbytes',
-                     'stdout_events_enabled', 'stdout_syslog',
-                     'stderr_logfile', 'stderr_capture_maxbytes',
-                     'stderr_events_enabled', 'stderr_syslog',
-                     'stopsignal', 'stopwaitsecs', 'stopasgroup',
-                     'killasgroup', 'exitcodes', 'redirect_stderr',
-                     'environment'):
-            defaults[name] = name
+        defaults = {
+            name: name
+            for name in (
+                'name',
+                'command',
+                'directory',
+                'umask',
+                'priority',
+                'autostart',
+                'autorestart',
+                'startsecs',
+                'startretries',
+                'uid',
+                'stdout_logfile',
+                'stdout_capture_maxbytes',
+                'stdout_events_enabled',
+                'stdout_syslog',
+                'stderr_logfile',
+                'stderr_capture_maxbytes',
+                'stderr_events_enabled',
+                'stderr_syslog',
+                'stopsignal',
+                'stopwaitsecs',
+                'stopasgroup',
+                'killasgroup',
+                'exitcodes',
+                'redirect_stderr',
+                'environment',
+            )
+        }
         for name in ('stdout_logfile_backups', 'stdout_logfile_maxbytes',
                      'stderr_logfile_backups', 'stderr_logfile_maxbytes'):
             defaults[name] = 10
-        defaults.update(kw)
+        defaults |= kw
         return self._getTargetClass()(*arg, **defaults)
 
     def test_make_process(self):

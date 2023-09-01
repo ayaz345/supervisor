@@ -22,17 +22,15 @@ def progressive_divide (n, parts):
     return result
 
 # b,k,m,g,t
-def split_by_units (n, units, dividers, format_string):
+def split_by_units(n, units, dividers, format_string):
     divs = progressive_divide (n, dividers)
-    result = []
-    for i in range(len(units)):
-        if divs[i]:
-            result.append (format_string % (divs[i], units[i]))
+    result = [
+        format_string % (divs[i], units[i])
+        for i in range(len(units))
+        if divs[i]
+    ]
     result.reverse()
-    if not result:
-        return [format_string % (0, units[0])]
-    else:
-        return result
+    return [format_string % (0, units[0])] if not result else result
 
 def english_bytes (n):
     return split_by_units (

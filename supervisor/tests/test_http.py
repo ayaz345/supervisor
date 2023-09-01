@@ -530,7 +530,7 @@ class SupervisorAuthHandlerTests(unittest.TestCase):
     def test_handle_request_authorizes_good_credentials(self):
         request = DummyRequest('/logtail/process1', None, None, None)
         encoded = base64.b64encode(as_bytes("user:password"))
-        request.header = ["Authorization: Basic %s" % as_string(encoded)]
+        request.header = [f"Authorization: Basic {as_string(encoded)}"]
         handler = DummyHandler()
         auth_handler = self._makeOne({'user':'password'}, handler)
         auth_handler.handle_request(request)
@@ -540,7 +540,7 @@ class SupervisorAuthHandlerTests(unittest.TestCase):
         request = DummyRequest('/logtail/process1', None, None, None)
         # password contains colon
         encoded = base64.b64encode(as_bytes("user:pass:word"))
-        request.header = ["Authorization: Basic %s" % as_string(encoded)]
+        request.header = [f"Authorization: Basic {as_string(encoded)}"]
         handler = DummyHandler()
         auth_handler = self._makeOne({'user':'pass:word'}, handler)
         auth_handler.handle_request(request)
@@ -549,7 +549,7 @@ class SupervisorAuthHandlerTests(unittest.TestCase):
     def test_handle_request_does_not_authorize_bad_credentials(self):
         request = DummyRequest('/logtail/process1', None, None, None)
         encoded = base64.b64encode(as_bytes("wrong:wrong"))
-        request.header = ["Authorization: Basic %s" % as_string(encoded)]
+        request.header = [f"Authorization: Basic {as_string(encoded)}"]
         handler = DummyHandler()
         auth_handler = self._makeOne({'user':'password'}, handler)
         auth_handler.handle_request(request)
@@ -679,7 +679,4 @@ class DummyProducer:
         self.data = list(data)
 
     def more(self):
-        if self.data:
-            return self.data.pop(0)
-        else:
-            return b''
+        return self.data.pop(0) if self.data else b''

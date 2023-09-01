@@ -353,7 +353,7 @@ class ExistingDirectoryTests(unittest.TestCase):
             self._callFUT(path)
             self.fail()
         except ValueError as e:
-            expected = "%s is not an existing directory" % path
+            expected = f"{path} is not an existing directory"
             self.assertEqual(e.args[0], expected)
 
     def test_not_a_directory(self):
@@ -362,7 +362,7 @@ class ExistingDirectoryTests(unittest.TestCase):
             self._callFUT(path)
             self.fail()
         except ValueError as e:
-            expected = "%s is not an existing directory" % path
+            expected = f"{path} is not an existing directory"
             self.assertEqual(e.args[0], expected)
 
     def test_expands_home(self):

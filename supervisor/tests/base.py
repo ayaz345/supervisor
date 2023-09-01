@@ -172,10 +172,7 @@ class DummyOptions:
         if self.make_pipes_exception is not None:
             raise self.make_pipes_exception
         pipes = {'child_stdin': 3, 'stdin': 4, 'stdout': 5, 'child_stdout': 6}
-        if stderr:
-            pipes['stderr'], pipes['child_stderr'] = (7, 8)
-        else:
-            pipes['stderr'], pipes['child_stderr'] = None, None
+        pipes['stderr'], pipes['child_stderr'] = (7, 8) if stderr else (None, None)
         return pipes
 
     def write(self, fd, chars):
@@ -238,14 +235,10 @@ class DummyOptions:
         self.removed.append(path)
 
     def exists(self, path):
-        if path in self.existing:
-            return True
-        return False
+        return path in self.existing
 
     def open(self, name, mode='r'):
-        if self.openreturn:
-            return self.openreturn
-        return open(name, mode)
+        return self.openreturn if self.openreturn else open(name, mode)
 
     def chdir(self, dir):
         if self.chdir_exception is not None:
@@ -291,19 +284,13 @@ class DummyLogger:
 
 class DummySupervisor:
     def __init__(self, options=None, state=None, process_groups=None):
-        if options is None:
-            self.options = DummyOptions()
-        else:
-            self.options = options
+        self.options = DummyOptions() if options is None else options
         if state is None:
             from supervisor.supervisord import SupervisorStates
             self.options.mood = SupervisorStates.RUNNING
         else:
             self.options.mood = state
-        if process_groups is None:
-            self.process_groups = {}
-        else:
-            self.process_groups = process_groups
+        self.process_groups = {} if process_groups is None else process_groups
 
     def get_state(self):
         return self.options.mood
@@ -591,7 +578,7 @@ def makeExecutable(file, substitutions=None):
 
     substitutions['PYTHON'] = sys.executable
     for key in substitutions.keys():
-        data = data.replace('<<%s>>' % key.upper(), substitutions[key])
+        data = data.replace(f'<<{key.upper()}>>', substitutions[key])
 
     with tempfile.NamedTemporaryFile(prefix=last, delete=False) as f:
         tmpnam = f.name
@@ -642,10 +629,7 @@ class DummyRequest(object):
         self.header = []
         self.outgoing = []
         self.channel = DummyMedusaChannel()
-        if env is None:
-            self.env = {}
-        else:
-            self.env = env
+        self.env = {} if env is None else env
 
     def split_uri(self):
         return self.args
@@ -780,8 +764,7 @@ class DummySupervisorRPCNamespace:
         from supervisor import xmlrpc
         for i in self.all_process_info:
             if i['name']==name:
-                info=i
-                return info
+                return i
         if name == 'BAD_NAME':
             raise Fault(xmlrpc.Faults.BAD_NAME, 'BAD_NAME')
         if name == 'FAILED':
@@ -1025,8 +1008,7 @@ class DummyPGroupConfig:
         return DummyProcessGroup(self)
 
     def __repr__(self):
-        return '<%s instance at %s named %s>' % (self.__class__, id(self),
-                                                 self.name)
+        return f'<{self.__class__} instance at {id(self)} named {self.name}>'
 
 class DummyFCGIGroupConfig(DummyPGroupConfig):
     def __init__(self, options, name='whatever', priority=999, pconfigs=None, socket_config=DummySocketConfig(1)):
